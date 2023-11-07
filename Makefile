@@ -1,0 +1,7 @@
+C_ARGS= 
+
+p4: p4.c
+	gcc p4.c -o p4 $(C_ARGS)
+
+clean:
+	rm p4
