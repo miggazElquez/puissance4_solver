@@ -2,11 +2,17 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
+#include <sys/time.h>
+#include <pthread.h>
+
 #define EMPTY 0
 #define RED 1
 #define YELLOW 2
 
-#define MAX_DEPTH 5
+#define MULTITHREADING 1
+#define INTERACTIVE 0
+#define MAX_DEPTH 7
 
 typedef struct {
 	uint64_t a;
@@ -250,42 +256,110 @@ int max(Board *bo,int depth,int alpha) { //Red to play
 	return score;
 }
 
-int cout_coup(Board *bo,int current_color, int* res) {
-	if (current_color == RED) {
-		int score = -2;
-		int coup;
+struct search_args {
+	Board *bo;
+	int i;
+	int current_color;
+	int *res;
+};
 
 
-		for (int col=0;col<7;col++) {
-			Board temp = *bo;
-			if (insert(&temp,col,RED)) continue;
-			int val = min(&temp,0,score);
-			printf("	%d : %d\n",col,val);
-			if (val > score) {
-				score = val;
-				coup = col;
-			}
-		}
-		*res = score;
-		return coup;
+void *start_search(void *arg) {
+	struct search_args *a = (struct search_args*)arg;
 
+	Board temp = *a->bo;
+	if (insert(&temp,a->i,RED)) {
+		a->res[a->i] = 2;
+	}
+
+	int val;
+	if (a->current_color == RED) {
+		val = min(&temp,0,-2); //-2 to not have alpha beta pruning
 	} else {
-		int score = 2;
-		int coup;
+		val = max(&temp,0,2); //same
+	}
 
-		for (int col=0;col<7;col++) {
-			Board temp = *bo;
-			if (insert(&temp,col,RED)) continue;
-			int val = max(&temp,0,score);
-			printf("	%d : %d\n",col,val);
-			if (val < score) {
-				score = val;
-				coup = col;
+	printf("	%d : %d\n",a->i,val);
+	a->res[a->i] = val;
+
+}
+
+int cout_coup(Board *bo,int current_color, int* res) {
+
+	if (MULTITHREADING == 1) {
+//Multithreaded version
+		pthread_t threads[7];
+		struct search_args args[7];
+
+		for (int i=0;i<7;i++) {
+
+			args[i].bo = bo;
+			args[i].i = i;
+			args[i].current_color = current_color;
+			args[i].res = res;
+
+			pthread_t thread_id;
+			pthread_create(&thread_id, NULL, &start_search, (void *)&args[i]); 
+			threads[i] = thread_id;
+		}
+		for (int i=0;i<7;i++) {
+			pthread_join(threads[i], NULL); 
+		}
+
+		int score = res[0];
+		int coup = 0;
+		for (int i=1;i<7;i++) {
+			if (res[i] == 2) continue;
+			if (current_color == RED) {
+				if (res[i] > score) {
+					score = res[i];
+					coup = i;
+				}
+			} else {
+				if (res[i] > score) {
+					score = res[i];
+					coup = i;
+				}
 			}
 		}
-		*res = score;
 		return coup;
+	} else {
+//Single threaded version
+		if (current_color == RED) {
+			int score = -2;
+			int coup;
 
+			for (int col=0;col<7;col++) {
+				Board temp = *bo;
+				if (insert(&temp,col,RED)) continue;
+				int val = min(&temp,0,score);
+				printf("	%d : %d\n",col,val);
+				if (val > score) {
+					score = val;
+					coup = col;
+				}
+			}
+			*res = score;
+			return coup;
+
+		} else {
+			int score = 2;
+			int coup;
+
+			for (int col=0;col<7;col++) {
+				Board temp = *bo;
+				if (insert(&temp,col,RED)) continue;
+				int val = max(&temp,0,score);
+				printf("	%d : %d\n",col,val);
+				if (val < score) {
+					score = val;
+					coup = col;
+				}
+			}
+			*res = score;
+			return coup;
+
+		}
 	}
 }
 
@@ -443,57 +517,84 @@ int main() {
 
 	print_board(&bo);
 
-	int col;
-	int winordraw;
-	int score;
-	//int coup = cout_coup(&bo, RED, &score);
-	int NbPions = 0;
-	Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
-	InitMask(PionsMask);
+	if (INTERACTIVE) {
 
-	
-	//printf("%d\n",coup);
-	 while (1) {
-
-	// 	int score;
-
-	// 	int coup = cout_coup(&bo, RED, &score);
-
-	// 	printf("coup : %d, eval=%d\n",coup,score);
-	// 	printf("%d\n",N);
-	// 	N = 0;
-	// 	insert(&bo,coup,RED);
-	// 	print_board(&bo);
+		int col;
+		int winordraw;
+		int NbPions = 0;
+		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
+		InitMask(PionsMask);
 
 
-	// 	if (win_check(&bo,RED,&score)) {
-	// 		printf("fin de partie !\n");
-	// 		printf("%d\n",score);
-	// 		printf("%lx %lx\n",bo.a,bo.b);
-	// 		exit(0);
-	// 	}
+
+		
+		//printf("%d\n",coup);
+		 while (1) {
+		// while (1) {
+
+		 	int score;
+
+		// 	int coup = cout_coup(&bo, RED, &score);
+
+		// 	printf("coup : %d, eval=%d\n",coup,score);
+		// 	printf("%d\n",N);
+		// 	N = 0;
+		// 	insert(&bo,coup,RED);
+		// 	print_board(&bo);
 
 
-	 	scanf("%d",&col);
-	 	if(insert_checkwin(&bo,col,current_color,&score,PionsMask,&winordraw,NbPions)==1){
-			exit(0);
-		}
-		NbPions++;
-	 	print_board(&bo);
-		if(winordraw){
-			printf("fin de partie\n");
-			if(score==RED){
-				printf("BRAVO ROUGE\n");
-			}else 
-				printf("BRAVO JAUNE\n");
-			exit(0);
-		}
-		current_color = current_color==RED?YELLOW:RED;
-	// 	if (win_check(&bo,YELLOW,&score)) {
-	// 		printf("fin de partie !\n");
-	// 		printf("%d\n",score);
-	// 		printf("%lx %lx\n",bo.a,bo.b);
-	// 		exit(0);
-	// 	}
-	 }
+		// 	if (win_check(&bo,RED,&score)) {
+		// 		printf("fin de partie !\n");
+		// 		printf("%d\n",score);
+		// 		printf("%lx %lx\n",bo.a,bo.b);
+		// 		exit(0);
+		// 	}
+
+
+		 	scanf("%d",&col);
+		 	if(insert_checkwin(&bo,col,current_color,&score,PionsMask,&winordraw,NbPions)==1){
+				exit(0);
+			}
+			NbPions++;
+		 	print_board(&bo);
+			if(winordraw){
+				printf("fin de partie\n");
+				if(score==RED){
+					printf("BRAVO ROUGE\n");
+				}else 
+					printf("BRAVO JAUNE\n");
+				exit(0);
+			}
+			current_color = current_color==RED?YELLOW:RED;
+		// 	if (win_check(&bo,YELLOW,&score)) {
+		// 		printf("fin de partie !\n");
+		// 		printf("%d\n",score);
+		// 		printf("%lx %lx\n",bo.a,bo.b);
+		// 		exit(0);
+		// 	}
+		 }
+	} else {
+
+		int scores[7];
+
+		clock_t start, end;
+
+		N = 0;
+		struct timeval start_i;
+		gettimeofday(&start_i,NULL);
+		start = clock();
+		int coup = cout_coup(&bo, RED, scores);
+		end = clock();
+
+		struct timeval end_i;
+		gettimeofday(&end_i,NULL);
+
+		double time = (end - start) / (double)CLOCKS_PER_SEC;
+
+		printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
+		printf("calculated %d nodes in %fs (%e nodes/s)\n",N,time,N/time);
+
+		printf("%d\n",coup);
+
+	}
 }
