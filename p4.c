@@ -11,8 +11,8 @@
 #define YELLOW 2
 
 #define MULTITHREADING 1
-#define INTERACTIVE 0
-#define MAX_DEPTH 7
+#define INTERACTIVE 2
+#define MAX_DEPTH 11
 
 typedef struct {
 	uint64_t a;
@@ -190,7 +190,7 @@ int win_check(Board *bo, int color, int *score) {
 	return 0;
 }
 
-int N = 0;
+uint64_t N = 0;
 
 int max(Board *bo,int depth,int alpha);
 
@@ -211,7 +211,7 @@ int min(Board *bo,int depth,int beta) { //Yellow to play
 		int val = max(&temp,depth+1,score);
 		if (val < score) {
 			score = val;
-			if (score < beta)
+			if (score <= beta)
 				return score;
 			if (score == -1) {
 				return score;
@@ -244,7 +244,7 @@ int max(Board *bo,int depth,int alpha) { //Red to play
 		int val = min(&temp,depth+1,score);
 		if (val > score) {
 			score = val;
-			if (score > alpha)
+			if (score >= alpha)
 				return score;
 
 			if (score == 1)
@@ -332,7 +332,7 @@ int cout_coup(Board *bo,int current_color, int* res) {
 			for (int col=0;col<7;col++) {
 				Board temp = *bo;
 				if (insert(&temp,col,RED)) continue;
-				int val = min(&temp,0,score);
+				int val = min(&temp,0,-2);
 				printf("	%d : %d\n",col,val);
 				if (val > score) {
 					score = val;
@@ -349,7 +349,7 @@ int cout_coup(Board *bo,int current_color, int* res) {
 			for (int col=0;col<7;col++) {
 				Board temp = *bo;
 				if (insert(&temp,col,RED)) continue;
-				int val = max(&temp,0,score);
+				int val = max(&temp,0,2);
 				printf("	%d : %d\n",col,val);
 				if (val < score) {
 					score = val;
@@ -517,7 +517,7 @@ int main() {
 
 	print_board(&bo);
 
-	if (INTERACTIVE) {
+	if (INTERACTIVE == 1) {
 
 		int col;
 		int winordraw;
@@ -573,6 +573,45 @@ int main() {
 		// 		exit(0);
 		// 	}
 		 }
+	} else if (INTERACTIVE == 2){
+
+		while (1) {
+			int scores[7];
+			int score;
+
+			clock_t start, end;
+
+			N = 0;
+			struct timeval start_i;
+			gettimeofday(&start_i,NULL);
+			start = clock();
+			int coup = cout_coup(&bo, RED, scores);
+			end = clock();
+
+			struct timeval end_i;
+			gettimeofday(&end_i,NULL);
+
+			double time = (end - start) / (double)CLOCKS_PER_SEC;
+
+			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
+			printf("calculated %ld nodes in %fs (%e nodes/s)\n",N,time,N/time);
+
+			printf("played %d\n",coup);
+			insert(&bo, coup,RED);
+
+		 	print_board(&bo);
+			
+			if (win_check(&bo, RED, &score)) exit(0);
+
+			int col;
+			scanf("%d",&col);
+			insert(&bo, col,YELLOW);
+			print_board(&bo);
+			if (win_check(&bo, YELLOW, &score)) exit(0);
+
+
+		}
+
 	} else {
 
 		int scores[7];
@@ -592,7 +631,7 @@ int main() {
 		double time = (end - start) / (double)CLOCKS_PER_SEC;
 
 		printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
-		printf("calculated %d nodes in %fs (%e nodes/s)\n",N,time,N/time);
+		printf("calculated %ld nodes in %fs (%e nodes/s)\n",N,time,N/time);
 
 		printf("%d\n",coup);
 
