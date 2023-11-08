@@ -189,8 +189,178 @@ int win_check(Board *bo, int color, int *score) {
 	}
 	return 0;
 }
+////////// ALTERNATIVE avec masques //////////
+int insert2(Board *bo, int col, int color,int* rowrec ) {
+	if (col > 6) {
+		printf("col trop grande\n");
+		return 1;
+	}
+	int row;
+	for (row =0;row<6;row++) {
+		if (get_val(bo,col,row) == EMPTY) {
+			set_val(bo,col,row,color);
+			*rowrec = row;
+			return 0;
+		}
+	}
+	if (row == 6) {
+		// printf("Column %d full\n",col);
+		return 1;
+	}
+}
+
+int win_check2(Board *bo, int color,int col,int row, int *score, Board *** PionsMask,const int NbPions) {
+	int res = color==RED?1:-1;
+	int draw = 1;
+	int p=0;
+
+	Board TestBoard;
+	if(color==RED){
+		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
+			TestBoard.a=PionsMask[col][row][p].a & bo->a;
+			TestBoard.b=PionsMask[col][row][p].b & bo->b;
+			if((TestBoard.a==PionsMask[col][row][p].a)&&(TestBoard.b==PionsMask[col][row][p].b)){
+				*score = res;
+				return 1;
+			}
+			p++;
+		}
+	}
+	else{
+		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
+			TestBoard.a=(PionsMask[col][row][p].a<<1) & bo->a;
+			TestBoard.b=(PionsMask[col][row][p].b<<1) & bo->b;
+			if((TestBoard.a==(PionsMask[col][row][p].a<<1))&&(TestBoard.b==(PionsMask[col][row][p].b<<1))){
+				*score = res;
+				return 1;
+			}
+			p++;
+		}
+	}
+	if(NbPions+1==42){
+		*score = 0;
+		return 1;
+	}
+	return 0;
+}
+
+
+
+///////////////
 
 uint64_t N = 0;
+
+
+
+//////////////////////////
+
+int max2(Board *bo,int depth,int alpha,Board *** PionsMask,int NbPions,const int col,const int row);
+int min2(Board *bo,int depth,int beta,Board *** PionsMask,int NbPions,const int col,const int row) { //Yellow to play
+	int score = 2;
+	// printf("min, depth : %d\n",depth);
+	// print_board(bo);
+
+	N++;
+	
+	if (win_check2(bo,RED,col,row,&score,PionsMask,NbPions)) {
+		return score;
+	}
+
+	for (int col=0;col<7;col++) {
+		Board temp = *bo;
+		int rowtemp;
+		if (insert2(&temp,col,YELLOW,&rowtemp)) continue;
+		int val = max2(&temp,depth+1,score,PionsMask,NbPions+1,col,rowtemp);
+		if (val < score) {
+			score = val;
+			if (score < beta)
+				return score;
+			if (score == -1) {
+				return score;
+			}
+		}
+	}
+
+	// printf("-> min, depth : %d, score : %d\n",depth,score);
+
+	return score;
+
+}
+
+int max2(Board *bo,int depth,int alpha,Board *** PionsMask,int NbPions,const int col,const int row) { //Red to play
+	// printf("max, depth : %d\n",depth);
+	// print_board(bo);
+
+	N++;
+
+	if (depth>MAX_DEPTH) return 0;
+	int score = -2;
+
+	if (win_check2(bo,YELLOW,col,row,&score,PionsMask,NbPions)) {
+		return score;
+	}
+
+	for (int col=0;col<7;col++) {
+		Board temp = *bo;
+		int rowtemp;
+		if (insert2(&temp,col,RED,&rowtemp)) continue;
+		int val = min2(&temp,depth+1,score,PionsMask,NbPions+1,col,rowtemp);
+		if (val > score) {
+			score = val;
+			if (score > alpha)
+				return score;
+
+			if (score == 1)
+				return score;
+		}
+	}
+
+	// printf("-> max, depth : %d, score : %d\n",depth,score);
+	return score;
+}
+
+int cout_coup2(Board *bo,int current_color, int* res,Board *** PionsMask,int NbPions) {
+	if (current_color == RED) {
+		int score = -2;
+		int coup;
+
+		int winordraw;
+		for (int col=0;col<7;col++) {
+			Board temp = *bo;
+			int rowtemp;
+			if (insert2(&temp,col,RED,&rowtemp)) continue;
+			//if(winordraw) return score; 
+			int val = min2(&temp,0,score,PionsMask,NbPions+1,col,rowtemp);
+			printf("	%d : %d\n",col,val);
+			if (val > score) {
+				score = val;
+				coup = col;
+			}
+		}
+		*res = score;
+		return coup;
+
+	} else {
+		int score = 2;
+		int coup;
+		int winordraw;
+		for (int col=0;col<7;col++) {
+			Board temp = *bo;
+			int rowtemp;
+			if (insert2(&temp,col,YELLOW,&rowtemp)) continue;
+			int val = max2(&temp,0,score,PionsMask,NbPions+1,col,rowtemp);
+			printf("	%d : %d\n",col,val);
+			if (val < score) {
+				score = val;
+				coup = col;
+			}
+		}
+		*res = score;
+		return coup;
+
+	}
+}
+//////////////////////////
 
 int max(Board *bo,int depth,int alpha);
 
@@ -525,56 +695,45 @@ int main() {
 		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
 		InitMask(PionsMask);
 
-
-
-		
-		//printf("%d\n",coup);
-		 while (1) {
-		// while (1) {
-
-		 	int score;
-
-		// 	int coup = cout_coup(&bo, RED, &score);
-
-		// 	printf("coup : %d, eval=%d\n",coup,score);
-		// 	printf("%d\n",N);
-		// 	N = 0;
-		// 	insert(&bo,coup,RED);
-		// 	print_board(&bo);
-
-
-		// 	if (win_check(&bo,RED,&score)) {
-		// 		printf("fin de partie !\n");
-		// 		printf("%d\n",score);
-		// 		printf("%lx %lx\n",bo.a,bo.b);
-		// 		exit(0);
-		// 	}
-
-
-		 	scanf("%d",&col);
-		 	if(insert_checkwin(&bo,col,current_color,&score,PionsMask,&winordraw,NbPions)==1){
-				exit(0);
-			}
+		while (1) {
+			int scores[7];
+			int score;
+			int NbPions = 0;
+			
+			clock_t start, end;
+			
+			N = 0;
+			struct timeval start_i;
+			gettimeofday(&start_i,NULL);
+			start = clock();
+			
+			int coup = cout_coup2(&bo, RED, &score,PionsMask,NbPions);
 			NbPions++;
-		 	print_board(&bo);
-			if(winordraw){
-				printf("fin de partie\n");
-				if(score==RED){
-					printf("BRAVO ROUGE\n");
-				}else 
-					printf("BRAVO JAUNE\n");
-				exit(0);
-			}
-			current_color = current_color==RED?YELLOW:RED;
-		// 	if (win_check(&bo,YELLOW,&score)) {
-		// 		printf("fin de partie !\n");
-		// 		printf("%d\n",score);
-		// 		printf("%lx %lx\n",bo.a,bo.b);
-		// 		exit(0);
-		// 	}
-		 }
-	} else if (INTERACTIVE == 2){
+			
+			end = clock();
 
+			struct timeval end_i;
+			gettimeofday(&end_i,NULL);
+
+			double time = (end - start) / (double)CLOCKS_PER_SEC;
+
+			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
+			printf("calculated %ld nodes in %fs (%e nodes/s)\n",N,time,N/time);
+
+			printf("played %d\n",coup);
+			insert(&bo, coup,RED);
+
+			print_board(&bo);
+			
+			if (win_check(&bo, RED, &score)) exit(0);
+
+			int col;
+			scanf("%d",&col);
+			insert(&bo, col,YELLOW);
+			print_board(&bo);
+			if (win_check(&bo, YELLOW, &score)) exit(0);
+			
+	} else if (INTERACTIVE == 2){
 		while (1) {
 			int scores[7];
 			int score;
@@ -611,7 +770,6 @@ int main() {
 
 
 		}
-
 	} else {
 
 		int scores[7];
