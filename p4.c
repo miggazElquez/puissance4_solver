@@ -732,7 +732,8 @@ int main() {
 			insert(&bo, col,YELLOW);
 			print_board(&bo);
 			if (win_check(&bo, YELLOW, &score)) exit(0);
-			
+		}
+		
 	} else if (INTERACTIVE == 2){
 		while (1) {
 			int scores[7];
