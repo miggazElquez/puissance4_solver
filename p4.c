@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
-
+#include <string.h>
 #define EMPTY 0
 #define RED 1
 #define YELLOW 2
 
-#define MAX_DEPTH 7
+#define MAX_DEPTH 5
 
 typedef struct {
 	uint64_t a;
@@ -75,6 +75,63 @@ int insert(Board *bo, int col, int color) {
 		return 1;
 	}
 }
+
+int insert_checkwin(Board *bo, const int col, const int color, int *score,Board *** PionsMask,int *winordraw,const int NbPions){
+	if (col > 6) {
+		printf("col trop grande\n");
+		return 1;
+	}
+	int row;
+	for (row =0;row<6;row++) {
+		if (get_val(bo,col,row) == EMPTY) {
+			set_val(bo,col,row,color);
+			break;
+		}
+	}
+	if (row == 6) {
+		// printf("Column %d full\n",col);
+		return 1;
+	}
+	
+	int res = color==RED?1:-1;
+	int draw = 1;
+	int p=0;
+	
+	*winordraw =0;
+	Board TestBoard;
+	if(color==RED){
+		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
+			TestBoard.a=PionsMask[col][row][p].a & bo->a;
+			TestBoard.b=PionsMask[col][row][p].b & bo->b;
+			if((TestBoard.a==PionsMask[col][row][p].a)&&(TestBoard.b==PionsMask[col][row][p].b)){
+				*winordraw =1;
+				*score = res;
+				return 0;
+			}
+			p++;
+		}
+	}
+	else{
+		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
+			TestBoard.a=(PionsMask[col][row][p].a<<1) & bo->a;
+			TestBoard.b=(PionsMask[col][row][p].b<<1) & bo->b;
+			if((TestBoard.a==(PionsMask[col][row][p].a<<1))&&(TestBoard.b==(PionsMask[col][row][p].b<<1))){
+				*winordraw =1;
+				*score = res;
+				return 0;
+			}
+			p++;
+		}
+	}
+	if(NbPions+1==42){
+		*winordraw =1;
+		*score = 0;
+		return 0;
+	}
+	
+	
+}
+
 
 
 //Check probablement lent, à améliorer
@@ -232,6 +289,151 @@ int cout_coup(Board *bo,int current_color, int* res) {
 	}
 }
 
+
+
+
+int InitMask(Board *** PionsMask){
+	for(int i=0;i<7;i++)
+		PionsMask[i] =  (Board**)malloc(6*sizeof(Board*));
+	Board boV[3][7]={0};
+	Board boH[4][6]={0};
+	//DP pour diagonale positive 
+	//DM pour diagonale moins (negative)
+	Board boDP[4][3]={0};
+	Board boDM[4][3]={0};
+//Creation des masques
+	//Les masques verticaux (4)
+	for(int i=0;i<7;i++){
+		for(int k=0;k<3;k++){
+			for(int j=0;j<4;j++){
+				set_val(&boV[k][i],i,k+j,RED);
+			}
+		}
+	}
+	//Les masques  horizontaux(3)
+	for(int i=0;i<6;i++){
+		for(int k=0;k<4;k++){
+			for(int j=0;j<4;j++){
+				set_val(&boH[k][i],k+j,i,RED);
+			}
+		}
+	}
+	//Les masques diagonaux 
+		
+	for(int i=0;i<3;i++){
+		for(int k=0;k<4;k++){
+			for(int j=0;j<4;j++){
+				//De Haut gauche a Bas droit
+				set_val(&boDP[k][i],k+j,i+j,RED);
+				//De Bas Gauche a Haut Droit
+				set_val(&boDM[k][i],3+k-j,i+j,RED);
+			}
+		}
+	}		
+		
+		
+	printf("Masque crées");
+
+//Affichage des masques 
+/*
+	for(int i=0;i<7;i++)
+		for(int k=0;k<3;k++) {
+			print_board(&boV[k][i]);
+			printf("\n");
+		}
+	for(int i=0;i<6;i++)
+		for(int k=0;k<4;k++) {
+			print_board(&boH[k][i]);
+			printf("\n");
+		}
+
+	for(int i=0;i<3;i++){
+		for(int k=0;k<4;k++){
+				//De Haut gauche a Bas droit
+				print_board(&boDM[k][i]);
+				printf("\n");
+		}
+	}		
+	for(int i=0;i<3;i++){
+		for(int k=0;k<4;k++){
+				//De Haut gauche a Bas droit
+				print_board(&boDP[k][i]);
+				printf("\n");
+		}
+	}		
+*/		
+Board TempMask[12]={0};
+for(int col=0;col<7;col++){
+	for(int row=0;row<6;row++){
+		int cptNbmask =0;
+		//parcours tous les masques : 
+		for(int i=0;i<7;i++)
+			for(int k=0;k<3;k++) {
+				if (get_val(&boV[k][i],col,row)){
+					printf("Le pion : %d,%d a pour masque : boV %d,%d\n",col,row,k,i );
+					TempMask[cptNbmask]=boV[k][i];
+					cptNbmask++;
+					
+				}
+			}
+		for(int i=0;i<6;i++)
+			for(int k=0;k<4;k++) {
+				if (get_val(&boH[k][i],col,row)){
+					printf("Le pion : %d,%d a pour masque : boH %d,%d\n",col,row,k,i );
+					TempMask[cptNbmask]=boH[k][i];
+					cptNbmask++;
+				}
+			}
+			
+
+		for(int i=0;i<3;i++){
+			for(int k=0;k<4;k++){
+					//De Haut gauche a Bas droit
+					if (get_val(&boDP[k][i],col,row)){
+						printf("Le pion : %d,%d a pour masque : boDP %d,%d\n",col,row,k,i );
+						TempMask[cptNbmask]=boDP[k][i];
+						cptNbmask++;
+					}
+			}
+		}		
+		for(int i=0;i<3;i++){
+			for(int k=0;k<4;k++){
+					//De Haut gauche a Bas droit
+					if(get_val(&boDM[k][i],col,row)){
+						printf("Le pion : %d,%d a pour masque : boDM %d,%d\n",col,row,k,i );
+						TempMask[cptNbmask]=boDM[k][i];
+						cptNbmask++;
+				}
+			}
+		}				
+		/*for(int i=0;i<12;i++){
+			print_board(&TempMask[i]);
+		}*/
+		
+		//fin de l'explo de tous les masques 
+		PionsMask[col][row]=(Board*)malloc(12*sizeof(Board));
+		memset(PionsMask[col][row],0,12*sizeof(Board));
+		memcpy(PionsMask[col][row],TempMask,12*sizeof(Board));
+		memset(TempMask,0,12*sizeof(Board));
+		
+	}
+}
+return 1;
+}
+int freeMask(Board *** PionsMask){
+	for(int col=0;col<7;col++)
+		for(int row=0;row<6;row++)
+			free(PionsMask[col][row]);
+	return 1;
+}
+
+
+
+
+
+
+
+
 int main() {
 	uint64_t val = 0x0000000000000000;
 	Board bo;
@@ -242,10 +444,16 @@ int main() {
 	print_board(&bo);
 
 	int col;
+	int winordraw;
 	int score;
-	int coup = cout_coup(&bo, RED, &score);
-	printf("%d\n",coup);
-	// while (1) {
+	//int coup = cout_coup(&bo, RED, &score);
+	int NbPions = 0;
+	Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
+	InitMask(PionsMask);
+
+	
+	//printf("%d\n",coup);
+	 while (1) {
 
 	// 	int score;
 
@@ -266,15 +474,26 @@ int main() {
 	// 	}
 
 
-	// 	scanf("%d",&col);
-	// 	insert(&bo,col,YELLOW);
-	// 	print_board(&bo);
-
+	 	scanf("%d",&col);
+	 	if(insert_checkwin(&bo,col,current_color,&score,PionsMask,&winordraw,NbPions)==1){
+			exit(0);
+		}
+		NbPions++;
+	 	print_board(&bo);
+		if(winordraw){
+			printf("fin de partie\n");
+			if(score==RED){
+				printf("BRAVO ROUGE\n");
+			}else 
+				printf("BRAVO JAUNE\n");
+			exit(0);
+		}
+		current_color = current_color==RED?YELLOW:RED;
 	// 	if (win_check(&bo,YELLOW,&score)) {
 	// 		printf("fin de partie !\n");
 	// 		printf("%d\n",score);
 	// 		printf("%lx %lx\n",bo.a,bo.b);
 	// 		exit(0);
 	// 	}
-	// }
+	 }
 }
