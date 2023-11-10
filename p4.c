@@ -6,67 +6,18 @@
 #include <sys/time.h>
 #include <pthread.h>
 
-#define EMPTY 0
-#define RED 1
-#define YELLOW 2
+#include "Board.h"
+
 
 #define MULTITHREADING 0
-#define USE_MASK_CHECK_WIN 1
 #define INTERACTIVE 1
 #define MAX_DEPTH 11
 
-typedef struct {
-	uint64_t a;
-	uint64_t b;
-	int nb_pions;
-} Board;
-
-int get_val(Board *bo, int col, int row) {
-	uint64_t temp = bo->a;
-	if (col >= 4) {
-		temp = bo->b;
-		col -= 4;
-	}
-
-	return (temp >> (2 * (col * 6 + row))) & 3;
-}
-
-void set_val(Board *bo, int col, int row, uint64_t val) {
-	uint64_t *temp;
-	uint64_t decal;
-	// printf("set %d on %d,%d\n",val,row,col);
-	if (col >= 4) {
-		temp = &bo->b;
-		decal = (2 * ((col - 4) * 6 + row));
-	} else {
-		temp = &bo->a;
-		decal = (2 * (col * 6 + row));
-	}
-
-	// printf("decal = %d\n",decal);
-	uint64_t trois = 4-1;
-	*temp &= ~(trois << decal);
-	*temp |= val << decal;
-}
 
 
-void print_board(Board *bo) {
-	for (int row=5;row >= 0; row--) {
-		printf("| ");
-		for (int col=0;col<7;col++) {
-			switch  (get_val(bo,col,row)) {
-				case EMPTY : printf(" "); break;
-				case RED   : printf("X"); break;
-				case YELLOW: printf("O"); break;
-				default : printf("ERROR on %d,%d\n",col,row);
-			}
-			printf(" | ");
-		}
-		putchar('\n');
-	}
-}
 
-int insert(Board *bo, int col, int color) {
+////////// ALTERNATIVE avec masques //////////
+int insert(Board *bo, int col, int color,int* rowrec ) {
 	if (col > 6) {
 		printf("col trop grande\n");
 		return 1;
@@ -75,6 +26,7 @@ int insert(Board *bo, int col, int color) {
 	for (row =0;row<6;row++) {
 		if (get_val(bo,col,row) == EMPTY) {
 			set_val(bo,col,row,color);
+			*rowrec = row;
 			bo->nb_pions++;
 			return 0;
 		}
@@ -84,9 +36,6 @@ int insert(Board *bo, int col, int color) {
 		return 1;
 	}
 }
-
-
-
 
 //Check probablement lent, à améliorer
 int win_check(Board *bo, int color, int *score) {
@@ -137,26 +86,6 @@ int win_check(Board *bo, int color, int *score) {
 	}
 	return 0;
 }
-////////// ALTERNATIVE avec masques //////////
-int insert2(Board *bo, int col, int color,int* rowrec ) {
-	if (col > 6) {
-		printf("col trop grande\n");
-		return 1;
-	}
-	int row;
-	for (row =0;row<6;row++) {
-		if (get_val(bo,col,row) == EMPTY) {
-			set_val(bo,col,row,color);
-			*rowrec = row;
-			bo->nb_pions++;
-			return 0;
-		}
-	}
-	if (row == 6) {
-		// printf("Column %d full\n",col);
-		return 1;
-	}
-}
 
 int win_check2(Board *bo, int color,int col,int row, int *score, Board *** PionsMask) {
 	int res = color==RED?1:-1;
@@ -204,8 +133,8 @@ volatile uint64_t N = 0;
 
 //////////////////////////
 
-int max2(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row);
-int min2(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const int row) { //Yellow to play
+int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row);
+int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const int row) { //Yellow to play
 	int score = 2;
 	// printf("min, depth : %d\n",depth);
 	// print_board(bo);
@@ -219,8 +148,8 @@ int min2(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const i
 	for (int col=0;col<7;col++) {
 		Board temp = *bo;
 		int rowtemp;
-		if (insert2(&temp,col,YELLOW,&rowtemp)) continue;
-		int val = max2(&temp,depth+1,score,PionsMask,col,rowtemp);
+		if (insert(&temp,col,YELLOW,&rowtemp)) continue;
+		int val = max(&temp,depth+1,score,PionsMask,col,rowtemp);
 		if (val < score) {
 			score = val;
 			if (score <= beta)
@@ -237,7 +166,7 @@ int min2(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const i
 
 }
 
-int max2(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row) { //Red to play
+int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row) { //Red to play
 	// printf("max, depth : %d\n",depth);
 	// print_board(bo);
 
@@ -253,115 +182,8 @@ int max2(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const 
 	for (int col=0;col<7;col++) {
 		Board temp = *bo;
 		int rowtemp;
-		if (insert2(&temp,col,RED,&rowtemp)) continue;
-		int val = min2(&temp,depth+1,score,PionsMask,col,rowtemp);
-		if (val > score) {
-			score = val;
-			if (score >= alpha)
-				return score;
-
-			if (score == 1)
-				return score;
-		}
-	}
-
-	// printf("-> max, depth : %d, score : %d\n",depth,score);
-	return score;
-}
-
-int cout_coup2(Board *bo,int current_color, int* res,Board *** PionsMask) {
-	if (current_color == RED) {
-		int score = -2;
-		int coup;
-
-		int winordraw;
-		for (int col=0;col<7;col++) {
-			Board temp = *bo;
-			int rowtemp;
-			if (insert2(&temp,col,RED,&rowtemp)) continue;
-			//if(winordraw) return score; 
-			int val = min2(&temp,0,-2,PionsMask,col,rowtemp);
-			printf("	%d : %d\n",col,val);
-			if (val > score) {
-				score = val;
-				coup = col;
-			}
-		}
-		*res = score;
-		return coup;
-
-	} else {
-		int score = 2;
-		int coup;
-		int winordraw;
-		for (int col=0;col<7;col++) {
-			Board temp = *bo;
-			int rowtemp;
-			if (insert2(&temp,col,YELLOW,&rowtemp)) continue;
-			int val = max2(&temp,0,2,PionsMask,col,rowtemp);
-			printf("	%d : %d\n",col,val);
-			if (val < score) {
-				score = val;
-				coup = col;
-			}
-		}
-		*res = score;
-		return coup;
-
-	}
-}
-//////////////////////////
-
-int max(Board *bo,int depth,int alpha);
-
-int min(Board *bo,int depth,int beta) { //Yellow to play
-	int score = 2;
-	// printf("min, depth : %d\n",depth);
-	// print_board(bo);
-
-	N++;
-
-	if (win_check(bo,RED,&score)) {
-		return score;
-	}
-
-	for (int col=0;col<7;col++) {
-		Board temp = *bo;
-		if (insert(&temp,col,YELLOW)) continue;
-		int val = max(&temp,depth+1,score);
-		if (val < score) {
-			score = val;
-			if (score <= beta)
-				return score;
-			if (score == -1) {
-				return score;
-			}
-		}
-	}
-
-	// printf("-> min, depth : %d, score : %d\n",depth,score);
-
-	return score;
-
-}
-
-int max(Board *bo,int depth,int alpha) { //Red to play
-	// printf("max, depth : %d\n",depth);
-	// print_board(bo);
-
-	N++;
-
-	if (depth>MAX_DEPTH) return 0;
-	int score = -2;
-
-	if (win_check(bo,YELLOW,&score)) {
-		return score;
-	}
-
-	for (int col=0;col<7;col++) {
-		Board temp = *bo;
-		if (insert(&temp,col,RED)) continue;
-		int val = min(&temp,depth+1,score);
+		if (insert(&temp,col,RED,&rowtemp)) continue;
+		int val = min(&temp,depth+1,score,PionsMask,col,rowtemp);
 		if (val > score) {
 			score = val;
 			if (score >= alpha)
@@ -381,22 +203,24 @@ struct search_args {
 	int i;
 	int current_color;
 	int *res;
+	Board *** PionsMask;
 };
 
 
 void *start_search(void *arg) {
 	struct search_args *a = (struct search_args*)arg;
 
+	int row;
 	Board temp = *a->bo;
-	if (insert(&temp,a->i,RED)) {
+	if (insert(&temp,a->i,RED,&row)) {
 		a->res[a->i] = 2;
 	}
 
 	int val;
 	if (a->current_color == RED) {
-		val = min(&temp,0,-2); //-2 to not have alpha beta pruning
+		val = min(&temp,0,-2,a->PionsMask,a->i,row); //-2 to not have alpha beta pruning
 	} else {
-		val = max(&temp,0,2); //same
+		val = max(&temp,0,2,a->PionsMask,a->i,row); //same
 	}
 
 	printf("	%d : %d\n",a->i,val);
@@ -404,8 +228,8 @@ void *start_search(void *arg) {
 
 }
 
-int cout_coup(Board *bo,int current_color, int* res) {
 
+int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask) {
 	if (MULTITHREADING == 1) {
 //Multithreaded version
 		pthread_t threads[7];
@@ -417,6 +241,7 @@ int cout_coup(Board *bo,int current_color, int* res) {
 			args[i].i = i;
 			args[i].current_color = current_color;
 			args[i].res = res;
+			args[i].PionsMask = PionsMask;
 
 			pthread_t thread_id;
 			pthread_create(&thread_id, NULL, &start_search, (void *)&args[i]); 
@@ -443,16 +268,16 @@ int cout_coup(Board *bo,int current_color, int* res) {
 			}
 		}
 		return coup;
-	} else {
-//Single threaded version
+	} else { //single thread
 		if (current_color == RED) {
 			int score = -2;
 			int coup;
 
 			for (int col=0;col<7;col++) {
 				Board temp = *bo;
-				if (insert(&temp,col,RED)) continue;
-				int val = min(&temp,0,-2);
+				int rowtemp;
+				if (insert(&temp,col,RED,&rowtemp)) continue;
+				int val = min(&temp,0,-2,PionsMask,col,rowtemp);
 				printf("	%d : %d\n",col,val);
 				if (val > score) {
 					score = val;
@@ -465,11 +290,11 @@ int cout_coup(Board *bo,int current_color, int* res) {
 		} else {
 			int score = 2;
 			int coup;
-
 			for (int col=0;col<7;col++) {
 				Board temp = *bo;
-				if (insert(&temp,col,RED)) continue;
-				int val = max(&temp,0,2);
+				int rowtemp;
+				if (insert(&temp,col,YELLOW,&rowtemp)) continue;
+				int val = max(&temp,0,2,PionsMask,col,rowtemp);
 				printf("	%d : %d\n",col,val);
 				if (val < score) {
 					score = val;
@@ -480,6 +305,7 @@ int cout_coup(Board *bo,int current_color, int* res) {
 			return coup;
 
 		}
+
 	}
 }
 
@@ -640,7 +466,6 @@ int main() {
 	if (INTERACTIVE == 1) {
 
 		int col;
-		int winordraw;
 		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
 		InitMask(PionsMask);
 
@@ -649,6 +474,7 @@ int main() {
 			int scores[7];
 			int score;
 			
+			int row;
 			
 			clock_t start, end;
 			
@@ -658,12 +484,7 @@ int main() {
 			printf("Lancement ...\n");
 			start = clock();
 			
-			int coup;
-			if (USE_MASK_CHECK_WIN) {
-				coup = cout_coup2(&bo, RED, &score,PionsMask);
-			} else {
-				coup = cout_coup(&bo, RED, scores);
-			}
+			int coup = cout_coup(&bo, RED, &score,PionsMask);
 
 			
 			end = clock();
@@ -673,12 +494,12 @@ int main() {
 
 			double time = (end - start) / (double)CLOCKS_PER_SEC;
 
-			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
+			printf("Wall time : %ds\n",end_i.tv_sec - start_i.tv_sec);
 			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
 
 			printf("played %d\n",coup);
 			printf("nb_pions:%d\n",bo.nb_pions);
-			insert(&bo, coup,RED);
+			insert(&bo, coup,RED,&row);
 
 
 			print_board(&bo);
@@ -687,7 +508,7 @@ int main() {
 
 			int col;
 			scanf("%d",&col);
-			insert(&bo, col,YELLOW);
+			insert(&bo, col,YELLOW,&row);
 			print_board(&bo);
 			if (win_check(&bo, YELLOW, &score)) exit(0);
 		}
@@ -695,13 +516,17 @@ int main() {
 
 		int scores[7];
 
+		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
+		InitMask(PionsMask);
+
+
 		clock_t start, end;
 
 		N = 0;
 		struct timeval start_i;
 		gettimeofday(&start_i,NULL);
 		start = clock();
-		int coup = cout_coup(&bo, RED, scores);
+		int coup = cout_coup(&bo, RED, scores,PionsMask);
 		end = clock();
 
 		struct timeval end_i;
