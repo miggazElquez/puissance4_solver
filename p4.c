@@ -10,8 +10,9 @@
 #define RED 1
 #define YELLOW 2
 
-#define MULTITHREADING 1
-#define INTERACTIVE 2
+#define MULTITHREADING 0
+#define USE_MASK_CHECK_WIN 1
+#define INTERACTIVE 1
 #define MAX_DEPTH 11
 
 typedef struct {
@@ -685,21 +686,21 @@ int main() {
 	bo.a = 0;
 	bo.b = 0;
 	int current_color = RED;
-
+	int NbPions = 0;
 	print_board(&bo);
 
 	if (INTERACTIVE == 1) {
 
 		int col;
 		int winordraw;
-		int NbPions = 0;
 		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
 		InitMask(PionsMask);
+
 
 		while (1) {
 			int scores[7];
 			int score;
-			int NbPions = 0;
+			
 			
 			clock_t start, end;
 			
@@ -709,21 +710,29 @@ int main() {
 			printf("Lancement ...\n");
 			start = clock();
 			
-			int coup = cout_coup2(&bo, RED, &score,PionsMask,NbPions);
+			int coup;
+			if (USE_MASK_CHECK_WIN) {
+				coup = cout_coup2(&bo, RED, &score,PionsMask,NbPions);
+			} else {
+				coup = cout_coup(&bo, RED, scores);
+			}
+
+			
+			end = clock();
+
+			struct timeval end_i;
+			gettimeofday(&end_i,NULL);
+
+			double time = (end - start) / (double)CLOCKS_PER_SEC;
+
+			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
+			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
+
+			printf("played %d\n",coup);
+			printf("NbPions:%d\n",NbPions);
+			insert(&bo, coup,RED);
 			NbPions++;
-			
-			end = clock();
 
-			struct timeval end_i;
-			gettimeofday(&end_i,NULL);
-
-			double time = (end - start) / (double)CLOCKS_PER_SEC;
-
-			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
-			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
-
-			printf("played %d\n",coup);
-			insert(&bo, coup,RED);
 
 			print_board(&bo);
 			
@@ -732,46 +741,9 @@ int main() {
 			int col;
 			scanf("%d",&col);
 			insert(&bo, col,YELLOW);
+			NbPions++;
 			print_board(&bo);
 			if (win_check(&bo, YELLOW, &score)) exit(0);
-		}
-		
-	} else if (INTERACTIVE == 2){
-		while (1) {
-			int scores[7];
-			int score;
-
-			clock_t start, end;
-
-			N = 0;
-			struct timeval start_i;
-			gettimeofday(&start_i,NULL);
-			start = clock();
-			int coup = cout_coup(&bo, RED, scores);
-			end = clock();
-
-			struct timeval end_i;
-			gettimeofday(&end_i,NULL);
-
-			double time = (end - start) / (double)CLOCKS_PER_SEC;
-
-			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
-			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
-
-			printf("played %d\n",coup);
-			insert(&bo, coup,RED);
-
-		 	print_board(&bo);
-			
-			if (win_check(&bo, RED, &score)) exit(0);
-
-			int col;
-			scanf("%d",&col);
-			insert(&bo, col,YELLOW);
-			print_board(&bo);
-			if (win_check(&bo, YELLOW, &score)) exit(0);
-
-
 		}
 	} else {
 
