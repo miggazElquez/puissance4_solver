@@ -10,8 +10,8 @@
 #define RED 1
 #define YELLOW 2
 
-#define MULTITHREADING 0
-#define INTERACTIVE 1
+#define MULTITHREADING 1
+#define INTERACTIVE 2
 #define MAX_DEPTH 11
 
 typedef struct {
@@ -249,7 +249,7 @@ int win_check2(Board *bo, int color,int col,int row, int *score, Board *** Pions
 
 ///////////////
 
-uint64_t N = 0;
+volatile uint64_t N = 0;
 
 
 
@@ -607,63 +607,63 @@ int InitMask(Board *** PionsMask){
 		}
 	}		
 */		
-Board TempMask[12]={0};
-for(int col=0;col<7;col++){
-	for(int row=0;row<6;row++){
-		int cptNbmask =0;
-		//parcours tous les masques : 
-		for(int i=0;i<7;i++)
-			for(int k=0;k<3;k++) {
-				if (get_val(&boV[k][i],col,row)){
-					//printf("Le pion : %d,%d a pour masque : boV %d,%d\n",col,row,k,i );
-					TempMask[cptNbmask]=boV[k][i];
-					cptNbmask++;
-					
+	Board TempMask[13]={0};
+	for(int col=0;col<7;col++){
+		for(int row=0;row<6;row++){
+			int cptNbmask =0;
+			//parcours tous les masques : 
+			for(int i=0;i<7;i++)
+				for(int k=0;k<3;k++) {
+					if (get_val(&boV[k][i],col,row)){
+						//printf("Le pion : %d,%d a pour masque : boV %d,%d\n",col,row,k,i );
+						TempMask[cptNbmask]=boV[k][i];
+						cptNbmask++;
+						
+					}
 				}
-			}
-		for(int i=0;i<6;i++)
-			for(int k=0;k<4;k++) {
-				if (get_val(&boH[k][i],col,row)){
-					//printf("Le pion : %d,%d a pour masque : boH %d,%d\n",col,row,k,i );
-					TempMask[cptNbmask]=boH[k][i];
-					cptNbmask++;
-				}
-			}
-			
-
-		for(int i=0;i<3;i++){
-			for(int k=0;k<4;k++){
-					//De Haut gauche a Bas droit
-					if (get_val(&boDP[k][i],col,row)){
-						//printf("Le pion : %d,%d a pour masque : boDP %d,%d\n",col,row,k,i );
-						TempMask[cptNbmask]=boDP[k][i];
+			for(int i=0;i<6;i++)
+				for(int k=0;k<4;k++) {
+					if (get_val(&boH[k][i],col,row)){
+						//printf("Le pion : %d,%d a pour masque : boH %d,%d\n",col,row,k,i );
+						TempMask[cptNbmask]=boH[k][i];
 						cptNbmask++;
 					}
-			}
-		}		
-		for(int i=0;i<3;i++){
-			for(int k=0;k<4;k++){
-					//De Haut gauche a Bas droit
-					if(get_val(&boDM[k][i],col,row)){
-						//printf("Le pion : %d,%d a pour masque : boDM %d,%d\n",col,row,k,i );
-						TempMask[cptNbmask]=boDM[k][i];
-						cptNbmask++;
 				}
-			}
-		}				
-		/*for(int i=0;i<12;i++){
-			print_board(&TempMask[i]);
-		}*/
-		
-		//fin de l'explo de tous les masques 
-		PionsMask[col][row]=(Board*)malloc(12*sizeof(Board));
-		memset(PionsMask[col][row],0,12*sizeof(Board));
-		memcpy(PionsMask[col][row],TempMask,12*sizeof(Board));
-		memset(TempMask,0,12*sizeof(Board));
-		
+				
+
+			for(int i=0;i<3;i++){
+				for(int k=0;k<4;k++){
+						//De Haut gauche a Bas droit
+						if (get_val(&boDP[k][i],col,row)){
+							//printf("Le pion : %d,%d a pour masque : boDP %d,%d\n",col,row,k,i );
+							TempMask[cptNbmask]=boDP[k][i];
+							cptNbmask++;
+						}
+				}
+			}		
+			for(int i=0;i<3;i++){
+				for(int k=0;k<4;k++){
+						//De Haut gauche a Bas droit
+						if(get_val(&boDM[k][i],col,row)){
+							//printf("Le pion : %d,%d a pour masque : boDM %d,%d\n",col,row,k,i );
+							TempMask[cptNbmask]=boDM[k][i];
+							cptNbmask++;
+					}
+				}
+			}				
+			/*for(int i=0;i<12;i++){
+				print_board(&TempMask[i]);
+			}*/
+			
+			//fin de l'explo de tous les masques 
+			PionsMask[col][row]=(Board*)malloc(13*sizeof(Board));
+			memset(PionsMask[col][row],0,13*sizeof(Board));
+			memcpy(PionsMask[col][row],TempMask,13*sizeof(Board));
+			memset(TempMask,0,13*sizeof(Board));
+			
+		}
 	}
-}
-return 1;
+	return 1;
 }
 int freeMask(Board *** PionsMask){
 	for(int col=0;col<7;col++)
