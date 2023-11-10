@@ -12,7 +12,7 @@
 
 #define MULTITHREADING 0
 #define INTERACTIVE 1
-#define MAX_DEPTH 13
+#define MAX_DEPTH 11
 
 typedef struct {
 	uint64_t a;
@@ -720,7 +720,7 @@ int main() {
 			double time = (end - start) / (double)CLOCKS_PER_SEC;
 
 			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
-			printf("calculated %ld nodes in %fs (%e nodes/s)\n",N,time,N/time);
+			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
 
 			printf("played %d\n",coup);
 			insert(&bo, coup,RED);
@@ -756,7 +756,7 @@ int main() {
 			double time = (end - start) / (double)CLOCKS_PER_SEC;
 
 			printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
-			printf("calculated %ld nodes in %fs (%e nodes/s)\n",N,time,N/time);
+			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
 
 			printf("played %d\n",coup);
 			insert(&bo, coup,RED);
@@ -792,7 +792,7 @@ int main() {
 		double time = (end - start) / (double)CLOCKS_PER_SEC;
 
 		printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
-		printf("calculated %ld nodes in %fs (%e nodes/s)\n",N,time,N/time);
+		printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
 
 		printf("%d\n",coup);
 
