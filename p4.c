@@ -18,6 +18,7 @@
 typedef struct {
 	uint64_t a;
 	uint64_t b;
+	int nb_pions;
 } Board;
 
 int get_val(Board *bo, int col, int row) {
@@ -74,6 +75,7 @@ int insert(Board *bo, int col, int color) {
 	for (row =0;row<6;row++) {
 		if (get_val(bo,col,row) == EMPTY) {
 			set_val(bo,col,row,color);
+			bo->nb_pions++;
 			return 0;
 		}
 	}
@@ -83,61 +85,6 @@ int insert(Board *bo, int col, int color) {
 	}
 }
 
-int insert_checkwin(Board *bo, const int col, const int color, int *score,Board *** PionsMask,int *winordraw,const int NbPions){
-	if (col > 6) {
-		printf("col trop grande\n");
-		return 1;
-	}
-	int row;
-	for (row =0;row<6;row++) {
-		if (get_val(bo,col,row) == EMPTY) {
-			set_val(bo,col,row,color);
-			break;
-		}
-	}
-	if (row == 6) {
-		// printf("Column %d full\n",col);
-		return 1;
-	}
-	
-	int res = color==RED?1:-1;
-	int draw = 1;
-	int p=0;
-	
-	*winordraw =0;
-	Board TestBoard;
-	if(color==RED){
-		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
-			TestBoard.a=PionsMask[col][row][p].a & bo->a;
-			TestBoard.b=PionsMask[col][row][p].b & bo->b;
-			if((TestBoard.a==PionsMask[col][row][p].a)&&(TestBoard.b==PionsMask[col][row][p].b)){
-				*winordraw =1;
-				*score = res;
-				return 0;
-			}
-			p++;
-		}
-	}
-	else{
-		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
-			TestBoard.a=(PionsMask[col][row][p].a<<1) & bo->a;
-			TestBoard.b=(PionsMask[col][row][p].b<<1) & bo->b;
-			if((TestBoard.a==(PionsMask[col][row][p].a<<1))&&(TestBoard.b==(PionsMask[col][row][p].b<<1))){
-				*winordraw =1;
-				*score = res;
-				return 0;
-			}
-			p++;
-		}
-	}
-	if(NbPions+1==42){
-		*winordraw =1;
-		*score = 0;
-		return 0;
-	}
-	
-	
-}
 
 
 
@@ -201,6 +148,7 @@ int insert2(Board *bo, int col, int color,int* rowrec ) {
 		if (get_val(bo,col,row) == EMPTY) {
 			set_val(bo,col,row,color);
 			*rowrec = row;
+			bo->nb_pions++;
 			return 0;
 		}
 	}
@@ -210,13 +158,13 @@ int insert2(Board *bo, int col, int color,int* rowrec ) {
 	}
 }
 
-int win_check2(Board *bo, int color,int col,int row, int *score, Board *** PionsMask,const int NbPions) {
+int win_check2(Board *bo, int color,int col,int row, int *score, Board *** PionsMask) {
 	int res = color==RED?1:-1;
 	int draw = 1;
 	int p=0;
 
 	Board TestBoard;
-	if(NbPions+1==42){
+	if(bo->nb_pions+1==42){
 		*score = 0;
 		return 1;
 	}
@@ -256,15 +204,15 @@ volatile uint64_t N = 0;
 
 //////////////////////////
 
-int max2(Board *bo,int depth,int alpha,Board *** PionsMask,int NbPions,const int colR,const int row);
-int min2(Board *bo,int depth,int beta,Board *** PionsMask,int NbPions,const int colR,const int row) { //Yellow to play
+int max2(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row);
+int min2(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const int row) { //Yellow to play
 	int score = 2;
 	// printf("min, depth : %d\n",depth);
 	// print_board(bo);
 
 	N++;
 	
-	if (win_check2(bo,RED,colR,row,&score,PionsMask,NbPions)) {
+	if (win_check2(bo,RED,colR,row,&score,PionsMask)) {
 		return score;
 	}
 
@@ -272,7 +220,7 @@ int min2(Board *bo,int depth,int beta,Board *** PionsMask,int NbPions,const int 
 		Board temp = *bo;
 		int rowtemp;
 		if (insert2(&temp,col,YELLOW,&rowtemp)) continue;
-		int val = max2(&temp,depth+1,score,PionsMask,NbPions+1,col,rowtemp);
+		int val = max2(&temp,depth+1,score,PionsMask,col,rowtemp);
 		if (val < score) {
 			score = val;
 			if (score <= beta)
@@ -289,7 +237,7 @@ int min2(Board *bo,int depth,int beta,Board *** PionsMask,int NbPions,const int 
 
 }
 
-int max2(Board *bo,int depth,int alpha,Board *** PionsMask,int NbPions,const int colR,const int row) { //Red to play
+int max2(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row) { //Red to play
 	// printf("max, depth : %d\n",depth);
 	// print_board(bo);
 
@@ -298,7 +246,7 @@ int max2(Board *bo,int depth,int alpha,Board *** PionsMask,int NbPions,const int
 	if (depth>MAX_DEPTH) return 0;
 	int score = -2;
 
-	if (win_check2(bo,YELLOW,colR,row,&score,PionsMask,NbPions)) {
+	if (win_check2(bo,YELLOW,colR,row,&score,PionsMask)) {
 		return score;
 	}
 
@@ -306,7 +254,7 @@ int max2(Board *bo,int depth,int alpha,Board *** PionsMask,int NbPions,const int
 		Board temp = *bo;
 		int rowtemp;
 		if (insert2(&temp,col,RED,&rowtemp)) continue;
-		int val = min2(&temp,depth+1,score,PionsMask,NbPions+1,col,rowtemp);
+		int val = min2(&temp,depth+1,score,PionsMask,col,rowtemp);
 		if (val > score) {
 			score = val;
 			if (score >= alpha)
@@ -321,7 +269,7 @@ int max2(Board *bo,int depth,int alpha,Board *** PionsMask,int NbPions,const int
 	return score;
 }
 
-int cout_coup2(Board *bo,int current_color, int* res,Board *** PionsMask,int NbPions) {
+int cout_coup2(Board *bo,int current_color, int* res,Board *** PionsMask) {
 	if (current_color == RED) {
 		int score = -2;
 		int coup;
@@ -332,7 +280,7 @@ int cout_coup2(Board *bo,int current_color, int* res,Board *** PionsMask,int NbP
 			int rowtemp;
 			if (insert2(&temp,col,RED,&rowtemp)) continue;
 			//if(winordraw) return score; 
-			int val = min2(&temp,0,-2,PionsMask,NbPions+1,col,rowtemp);
+			int val = min2(&temp,0,-2,PionsMask,col,rowtemp);
 			printf("	%d : %d\n",col,val);
 			if (val > score) {
 				score = val;
@@ -350,7 +298,7 @@ int cout_coup2(Board *bo,int current_color, int* res,Board *** PionsMask,int NbP
 			Board temp = *bo;
 			int rowtemp;
 			if (insert2(&temp,col,YELLOW,&rowtemp)) continue;
-			int val = max2(&temp,0,2,PionsMask,NbPions+1,col,rowtemp);
+			int val = max2(&temp,0,2,PionsMask,col,rowtemp);
 			printf("	%d : %d\n",col,val);
 			if (val < score) {
 				score = val;
@@ -608,7 +556,7 @@ int InitMask(Board *** PionsMask){
 		}
 	}		
 */		
-	Board TempMask[13]={0};
+	Board TempMask[14]={0};
 	for(int col=0;col<7;col++){
 		for(int row=0;row<6;row++){
 			int cptNbmask =0;
@@ -657,10 +605,10 @@ int InitMask(Board *** PionsMask){
 			}*/
 			
 			//fin de l'explo de tous les masques 
-			PionsMask[col][row]=(Board*)malloc(13*sizeof(Board));
-			memset(PionsMask[col][row],0,13*sizeof(Board));
-			memcpy(PionsMask[col][row],TempMask,13*sizeof(Board));
-			memset(TempMask,0,13*sizeof(Board));
+			PionsMask[col][row]=(Board*)malloc(14*sizeof(Board));
+			memset(PionsMask[col][row],0,14*sizeof(Board));
+			memcpy(PionsMask[col][row],TempMask,14*sizeof(Board));
+			memset(TempMask,0,14*sizeof(Board));
 			
 		}
 	}
@@ -685,8 +633,8 @@ int main() {
 	Board bo;
 	bo.a = 0;
 	bo.b = 0;
+	bo.nb_pions = 0;
 	int current_color = RED;
-	int NbPions = 0;
 	print_board(&bo);
 
 	if (INTERACTIVE == 1) {
@@ -712,7 +660,7 @@ int main() {
 			
 			int coup;
 			if (USE_MASK_CHECK_WIN) {
-				coup = cout_coup2(&bo, RED, &score,PionsMask,NbPions);
+				coup = cout_coup2(&bo, RED, &score,PionsMask);
 			} else {
 				coup = cout_coup(&bo, RED, scores);
 			}
@@ -729,9 +677,8 @@ int main() {
 			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
 
 			printf("played %d\n",coup);
-			printf("NbPions:%d\n",NbPions);
+			printf("nb_pions:%d\n",bo.nb_pions);
 			insert(&bo, coup,RED);
-			NbPions++;
 
 
 			print_board(&bo);
@@ -741,7 +688,6 @@ int main() {
 			int col;
 			scanf("%d",&col);
 			insert(&bo, col,YELLOW);
-			NbPions++;
 			print_board(&bo);
 			if (win_check(&bo, YELLOW, &score)) exit(0);
 		}
