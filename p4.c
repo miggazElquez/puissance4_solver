@@ -12,8 +12,25 @@
 #define MULTITHREADING 0
 #define INTERACTIVE 1
 #define MAX_DEPTH 11
+#define USE_HASHMAP 1
+
+//Hash map
+#define HASHMAP_SIZE  65536 //must be a power of two
+//different types of hash function
+#define BASIC_XOR 1
+#define XOR_ADD 2
+#define XOR_32 3
+#define XOR_ADD_32 4
+#define XOR_16 5
+#define XOR_ADD_16 6
 
 
+#define HASH_FUNCTION XOR_ADD_16 //Use one of the defined Hash
+
+typedef struct {
+   Board bo;
+   int value;
+} HashMap_Val;
 
 
 ////////// ALTERNATIVE avec masques //////////
@@ -124,17 +141,70 @@ int win_check2(Board *bo, int color,int col,int row, int *score, Board *** Pions
 }
 
 
+uint64_t hash_basic_xor(Board *bo) {
+	return bo->a ^ bo->b;
+}
+
+uint64_t hash_xor_add(Board *bo) {
+	return bo->a ^ bo->b + bo->nb_pions;
+}
+
+
+uint64_t hash_xor_32(Board *bo) {
+	return (bo->a & 0xffffffff) ^ (bo->a >> 32) ^ (bo->b & 0xffffffff) ^ (bo->b >> 32);
+}
+
+uint64_t hash_xor_32_add(Board *bo) {
+	return (bo->a & 0xffffffff) ^ (bo->a >> 32) ^ (bo->b & 0xffffffff) ^ (bo->b >> 32) + bo->nb_pions;
+}
+
+uint64_t hash_xor_16(Board *bo) {
+	uint64_t a = (bo->a >> 48) ^ ((bo->a >> 32) & 0xFFFF) ^ ((bo->a >> 16) & 0xFFFF) ^ (bo->a & 0xFFFF);
+	uint64_t b = (bo->b >> 48) ^ ((bo->b >> 32) & 0xFFFF) ^ ((bo->b >> 16) & 0xFFFF) ^ (bo->b & 0xFFFF);
+	return a ^ b;
+}
+
+uint64_t hash_xor_16_add(Board *bo) {
+	uint64_t a = (bo->a >> 48) ^ ((bo->a >> 32) & 0xFFFF) ^ ((bo->a >> 16) & 0xFFFF) ^ (bo->a & 0xFFFF);
+	uint64_t b = (bo->b >> 48) ^ ((bo->b >> 32) & 0xFFFF) ^ ((bo->b >> 16) & 0xFFFF) ^ (bo->b & 0xFFFF);
+
+	return a ^ b + bo->nb_pions;
+}
+
+
+uint64_t hash_board(Board *bo) {
+	if (HASH_FUNCTION == BASIC_XOR) {
+		return hash_basic_xor(bo);
+	} else if (HASH_FUNCTION == XOR_ADD) {
+		return hash_xor_add(bo);
+	} else if (HASH_FUNCTION == XOR_32) {
+		return hash_xor_32(bo);
+	} else if (HASH_FUNCTION == XOR_ADD_32) {
+		return hash_xor_32_add(bo);
+	} else if (HASH_FUNCTION == XOR_16) {
+		return hash_xor_16(bo);
+	} else if (HASH_FUNCTION == XOR_ADD_16) {
+		return hash_xor_16_add(bo);
+	} else {
+		printf("No hash function defined\n");
+		exit(0);
+	}
+}
+
+
 
 ///////////////
 
 volatile uint64_t N = 0;
+uint64_t HIT = 0;
+uint64_t MISS = 0;
 
 
 
 //////////////////////////
 
-int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row);
-int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const int row) { //Yellow to play
+int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row,HashMap_Val *hash_map);
+int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Yellow to play
 	int score = 2;
 	// printf("min, depth : %d\n",depth);
 	// print_board(bo);
@@ -149,24 +219,44 @@ int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const in
 		Board temp = *bo;
 		int rowtemp;
 		if (insert(&temp,col,YELLOW,&rowtemp)) continue;
-		int val = max(&temp,depth+1,score,PionsMask,col,rowtemp);
+
+		int val;
+		if (USE_HASHMAP == 1) {
+			uint64_t hash = hash_board(&temp) % HASHMAP_SIZE;
+			HashMap_Val h = hash_map[hash];
+			if (h.bo.a == temp.a && h.bo.b == temp.b) {
+				val = h.value;
+				HIT++;
+			} else {
+				val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+				MISS++;
+			}
+		} else {
+			val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+		}
+
 		if (val < score) {
 			score = val;
 			if (score <= beta)
-				return score;
+				goto end_function;
 			if (score == -1) {
-				return score;
+				goto end_function;
 			}
 		}
 	}
 
 	// printf("-> min, depth : %d, score : %d\n",depth,score);
-
+end_function:
+	if (USE_HASHMAP == 1) {
+		uint64_t hash = hash_board(bo) % HASHMAP_SIZE;
+		hash_map[hash].bo = *bo;
+		hash_map[hash].value = score;
+	}
 	return score;
 
 }
 
-int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row) { //Red to play
+int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Red to play
 	// printf("max, depth : %d\n",depth);
 	// print_board(bo);
 
@@ -183,15 +273,37 @@ int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const i
 		Board temp = *bo;
 		int rowtemp;
 		if (insert(&temp,col,RED,&rowtemp)) continue;
-		int val = min(&temp,depth+1,score,PionsMask,col,rowtemp);
+
+		int val;
+		if (USE_HASHMAP == 1) {
+			uint64_t hash = hash_board(&temp) % HASHMAP_SIZE;
+			HashMap_Val h = hash_map[hash];
+			if (h.bo.a == temp.a && h.bo.b == temp.b) {
+				val = h.value;
+				HIT++;
+			} else {
+				val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+				MISS++;
+			}
+		} else {
+			val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+		}
+
 		if (val > score) {
 			score = val;
 			if (score >= alpha)
-				return score;
+				goto end_function;
 
 			if (score == 1)
-				return score;
+				goto end_function;
 		}
+	}
+
+end_function:
+	if (USE_HASHMAP == 1) {
+		uint64_t hash = hash_board(bo) % HASHMAP_SIZE;
+		hash_map[hash].value = score;
+		hash_map[hash].bo = *bo;
 	}
 
 	// printf("-> max, depth : %d, score : %d\n",depth,score);
@@ -218,9 +330,9 @@ void *start_search(void *arg) {
 
 	int val;
 	if (a->current_color == RED) {
-		val = min(&temp,0,-2,a->PionsMask,a->i,row); //-2 to not have alpha beta pruning
+		val = min(&temp,0,-2,a->PionsMask,a->i,row,NULL); //-2 to not have alpha beta pruning
 	} else {
-		val = max(&temp,0,2,a->PionsMask,a->i,row); //same
+		val = max(&temp,0,2,a->PionsMask,a->i,row,NULL); //same
 	}
 
 	printf("	%d : %d\n",a->i,val);
@@ -229,7 +341,7 @@ void *start_search(void *arg) {
 }
 
 
-int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask) {
+int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask,HashMap_Val *hash_map) {
 	if (MULTITHREADING == 1) {
 //Multithreaded version
 		pthread_t threads[7];
@@ -277,7 +389,7 @@ int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask) {
 				Board temp = *bo;
 				int rowtemp;
 				if (insert(&temp,col,RED,&rowtemp)) continue;
-				int val = min(&temp,0,-2,PionsMask,col,rowtemp);
+				int val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
 				printf("	%d : %d\n",col,val);
 				if (val > score) {
 					score = val;
@@ -294,7 +406,7 @@ int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask) {
 				Board temp = *bo;
 				int rowtemp;
 				if (insert(&temp,col,YELLOW,&rowtemp)) continue;
-				int val = max(&temp,0,2,PionsMask,col,rowtemp);
+				int val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
 				printf("	%d : %d\n",col,val);
 				if (val < score) {
 					score = val;
@@ -425,7 +537,7 @@ int InitMask(Board *** PionsMask){
 							cptNbmask++;
 					}
 				}
-			}				
+			}
 			/*for(int i=0;i<12;i++){
 				print_board(&TempMask[i]);
 			}*/
@@ -452,8 +564,6 @@ int freeMask(Board *** PionsMask){
 
 
 
-
-
 int main() {
 	uint64_t val = 0x0000000000000000;
 	Board bo;
@@ -463,11 +573,19 @@ int main() {
 	int current_color = RED;
 	print_board(&bo);
 
+
 	if (INTERACTIVE == 1) {
 
 		int col;
 		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
 		InitMask(PionsMask);
+
+		HashMap_Val *hash_map;
+
+		if (USE_HASHMAP == 1) {
+			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
+			memset(hash_map,HASHMAP_SIZE * sizeof(HashMap_Val), 0);
+		}
 
 
 		while (1) {
@@ -484,7 +602,12 @@ int main() {
 			printf("Lancement ...\n");
 			start = clock();
 			
-			int coup = cout_coup(&bo, RED, &score,PionsMask);
+			if (USE_HASHMAP == 1) {
+				memset(hash_map,HASHMAP_SIZE * sizeof(HashMap_Val), 0);
+				HIT = 0;
+				MISS = 0;
+			}
+			int coup = cout_coup(&bo, RED, &score,PionsMask,hash_map);
 
 			
 			end = clock();
@@ -496,10 +619,23 @@ int main() {
 
 			printf("Wall time : %ds\n",end_i.tv_sec - start_i.tv_sec);
 			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
+			printf("%d HIT, %f%\n",HIT, HIT / (float)(HIT+MISS) * 100);
+			if (USE_HASHMAP == 1) {
+				int count = 0;
+				for (int i=0;i<HASHMAP_SIZE;i++) {
+					if (hash_map[i].bo.a != 0 || hash_map[i].bo.b != 0) {
+						count++;
+					}
+				}
+				printf("count : %d (%f%)\n",count, (float)count / HASHMAP_SIZE * 100);
+			}
 
 			printf("played %d\n",coup);
 			printf("nb_pions:%d\n",bo.nb_pions);
 			insert(&bo, coup,RED,&row);
+
+
+
 
 
 			print_board(&bo);
@@ -519,6 +655,14 @@ int main() {
 		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
 		InitMask(PionsMask);
 
+		HashMap_Val *hash_map;
+
+		if (USE_HASHMAP == 1) {
+			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
+			memset(hash_map,HASHMAP_SIZE * sizeof(HashMap_Val), 0);
+		}
+
+
 
 		clock_t start, end;
 
@@ -526,7 +670,7 @@ int main() {
 		struct timeval start_i;
 		gettimeofday(&start_i,NULL);
 		start = clock();
-		int coup = cout_coup(&bo, RED, scores,PionsMask);
+		int coup = cout_coup(&bo, RED, scores,PionsMask,hash_map);
 		end = clock();
 
 		struct timeval end_i;

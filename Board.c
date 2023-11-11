@@ -35,6 +35,7 @@ void set_val(Board *bo, int col, int row, uint64_t val) {
 
 
 void print_board(Board *bo) {
+//	printf("{%lx, %lx}\n",bo->a, bo->b);
 	for (int row=5;row >= 0; row--) {
 		printf("| ");
 		for (int col=0;col<7;col++) {
