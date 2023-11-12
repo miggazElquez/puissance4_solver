@@ -11,8 +11,8 @@
 
 #define MULTITHREADING 0
 #define INTERACTIVE 1
-#define MAX_DEPTH 11
-#define USE_HASHMAP 1
+#define MAX_DEPTH 13
+#define USE_HASHMAP 0
 
 //Hash map
 #define HASHMAP_SIZE  65536 //must be a power of two
@@ -501,15 +501,11 @@ int InitMask(Board *** PionsMask){
 		for(int row=0;row<6;row++){
 			int cptNbmask =0;
 			//parcours tous les masques : 
-			for(int i=0;i<7;i++)
-				for(int k=0;k<3;k++) {
-					if (get_val(&boV[k][i],col,row)){
-						//printf("Le pion : %d,%d a pour masque : boV %d,%d\n",col,row,k,i );
-						TempMask[cptNbmask]=boV[k][i];
-						cptNbmask++;
-						
-					}
-				}
+			//Pour les verticaux ne pas mettre les masques aux premieres ligne 0,1,2 et faire attenttion au ligne 3,4
+			if(row > 2){
+				TempMask[cptNbmask]=boV[row-3][col];
+				cptNbmask++;
+			}
 			for(int i=0;i<6;i++)
 				for(int k=0;k<4;k++) {
 					if (get_val(&boH[k][i],col,row)){
