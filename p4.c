@@ -644,8 +644,12 @@ int main() {
 				exit(0);
 			}
 			int col;
-			scanf("%d",&col);
-			insert(&bo, col,YELLOW,&row);
+			int played = 1;
+			while (played) {
+				printf("Your move : ");
+				scanf("%d",&col);
+				played = insert(&bo, col,YELLOW,&row);
+			}
 			print_board(&bo);
 			if (win_check(&bo, YELLOW, &score)) {
 				printf("FIN DE PARTIE\n");

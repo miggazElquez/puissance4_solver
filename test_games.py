@@ -8,7 +8,7 @@ import sys
 
 def generate_input():
 	lst = []
-	for i in range(25):
+	for i in range(100): #big value because there could be two much wasted values when trying to play on a full column
 		lst.append(random.randint(0,6))
 
 	return lst
