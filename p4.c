@@ -22,7 +22,7 @@
 #define XOR_32 3
 #define XOR_ADD_32 4
 #define XOR_16 5
-#define XOR_ADD_16 6
+#define XOR_ADD_16 6 //best one for now, with 2^16 size
 
 
 #define HASH_FUNCTION XOR_ADD_16 //Use one of the defined Hash
@@ -159,14 +159,16 @@ uint64_t hash_xor_32_add(Board *bo) {
 }
 
 uint64_t hash_xor_16(Board *bo) {
-	uint64_t a = (bo->a >> 48) ^ ((bo->a >> 32) & 0xFFFF) ^ ((bo->a >> 16) & 0xFFFF) ^ (bo->a & 0xFFFF);
-	uint64_t b = (bo->b >> 48) ^ ((bo->b >> 32) & 0xFFFF) ^ ((bo->b >> 16) & 0xFFFF) ^ (bo->b & 0xFFFF);
+	uint64_t a = ((bo->a >> 32) & 0xFFFF) ^ ((bo->a >> 16) & 0xFFFF) ^ (bo->a & 0xFFFF);
+	uint64_t b = ((bo->b >> 32) & 0xFFFF) ^ ((bo->b >> 16) & 0xFFFF) ^ (bo->b & 0xFFFF);
 	return a ^ b;
 }
 
 uint64_t hash_xor_16_add(Board *bo) {
-	uint64_t a = (bo->a >> 48) ^ ((bo->a >> 32) & 0xFFFF) ^ ((bo->a >> 16) & 0xFFFF) ^ (bo->a & 0xFFFF);
-	uint64_t b = (bo->b >> 48) ^ ((bo->b >> 32) & 0xFFFF) ^ ((bo->b >> 16) & 0xFFFF) ^ (bo->b & 0xFFFF);
+	//We don't need all 16bits part : a fits on 48 bits, and b on 36 bits
+	//
+	uint64_t a = ((bo->a >> 32) & 0xFFFF) ^ ((bo->a >> 16) & 0xFFFF) ^ (bo->a & 0xFFFF);
+	uint64_t b = ((bo->b >> 32) & 0xFFFF) ^ ((bo->b >> 16) & 0xFFFF) ^ (bo->b & 0xFFFF);
 
 	return a ^ b + bo->nb_pions;
 }
@@ -464,7 +466,7 @@ int InitMask(Board *** PionsMask){
 	}		
 		
 		
-	printf("Masque crées");
+	printf("Masque crées\n");
 
 //Affichage des masques 
 /*
@@ -584,7 +586,7 @@ int main() {
 
 		if (USE_HASHMAP == 1) {
 			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
-			memset(hash_map,HASHMAP_SIZE * sizeof(HashMap_Val), 0);
+			memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
 		}
 
 
@@ -603,7 +605,7 @@ int main() {
 			start = clock();
 			
 			if (USE_HASHMAP == 1) {
-				memset(hash_map,HASHMAP_SIZE * sizeof(HashMap_Val), 0);
+				memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
 				HIT = 0;
 				MISS = 0;
 			}
@@ -640,13 +642,20 @@ int main() {
 
 			print_board(&bo);
 			
-			if (win_check(&bo, RED, &score)) exit(0);
-
+			if (win_check(&bo, RED, &score)) {
+				printf("FIN DE PARTIE\n");
+				printf("%lx %lx\n",bo.a, bo.b);
+				exit(0);
+			}
 			int col;
 			scanf("%d",&col);
 			insert(&bo, col,YELLOW,&row);
 			print_board(&bo);
-			if (win_check(&bo, YELLOW, &score)) exit(0);
+			if (win_check(&bo, YELLOW, &score)) {
+				printf("FIN DE PARTIE\n");
+				printf("%lx %lx\n",bo.a, bo.b);
+				exit(0);
+			}
 		}
 	} else {
 
@@ -659,7 +668,7 @@ int main() {
 
 		if (USE_HASHMAP == 1) {
 			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
-			memset(hash_map,HASHMAP_SIZE * sizeof(HashMap_Val), 0);
+			memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
 		}
 
 
@@ -678,8 +687,18 @@ int main() {
 
 		double time = (end - start) / (double)CLOCKS_PER_SEC;
 
-		printf("Wall time : %d,%ds\n",end_i.tv_sec - start_i.tv_sec);
+		printf("Wall time : %ds\n",end_i.tv_sec - start_i.tv_sec);
 		printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
+		printf("%d HIT, %f%\n",HIT, HIT / (float)(HIT+MISS) * 100);
+		if (USE_HASHMAP == 1) {
+			int count = 0;
+			for (int i=0;i<HASHMAP_SIZE;i++) {
+				if (hash_map[i].bo.a != 0 || hash_map[i].bo.b != 0) {
+					count++;
+				}
+			}
+			printf("count : %d (%f%)\n",count, (float)count / HASHMAP_SIZE * 100);
+		}
 
 		printf("%d\n",coup);
 

@@ -6,5 +6,8 @@ p4: p4.c Board.h  Board.o
 Board.o : Board.h Board.c
 	gcc Board.c -c -o Board.o $(C_ARGS)
 
+asm: p4.c Board.h Board.o
+	gcc p4.c Board.o -O3 -g -S -masm=intel -fverbose-asm
+
 clean:
 	rm p4 Board.o
