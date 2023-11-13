@@ -10,7 +10,7 @@
 
 
 #define MULTITHREADING 0
-#define INTERACTIVE 1
+#define INTERACTIVE 0
 #define MAX_DEPTH 13
 #define USE_HASHMAP 0
 
@@ -35,10 +35,10 @@ typedef struct {
 
 ////////// ALTERNATIVE avec masques //////////
 int insert(Board *bo, int col, int color,int* rowrec ) {
-	if (col > 6) {
+	/*if (col > 6) {
 		printf("col trop grande\n");
 		return 1;
-	}
+	}*/
 	int row;
 	for (row =0;row<6;row++) {
 		if (get_val(bo,col,row) == EMPTY) {
