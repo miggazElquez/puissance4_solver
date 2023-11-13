@@ -12,7 +12,7 @@
 #define MULTITHREADING 0
 #define INTERACTIVE 0
 #define MAX_DEPTH 13
-#define USE_HASHMAP 0
+#define USE_HASHMAP 1
 
 //Hash map
 #define HASHMAP_SIZE  65536 //must be a power of two
@@ -22,16 +22,17 @@
 #define XOR_32 3
 #define XOR_ADD_32 4
 #define XOR_16 5
-#define XOR_ADD_16 6 //best one for now, with 2^16 size
+#define XOR_ADD_16 6
+#define ZOBRIST_HASH 7
 
-
-#define HASH_FUNCTION XOR_ADD_16 //Use one of the defined Hash
+#define HASH_FUNCTION ZOBRIST_HASH //Use one of the defined Hash
 
 typedef struct {
    Board bo;
    int value;
 } HashMap_Val;
 
+uint64_t ZOBRIST_RANDOM[84];
 
 ////////// ALTERNATIVE avec masques //////////
 int insert(Board *bo, int col, int color,int* rowrec ) {
@@ -45,6 +46,10 @@ int insert(Board *bo, int col, int color,int* rowrec ) {
 			set_val(bo,col,row,color);
 			*rowrec = row;
 			bo->nb_pions++;
+			if (USE_HASHMAP == 1 && HASH_FUNCTION == ZOBRIST_HASH) {
+				int index = (col*6 + row) * color;
+				bo->zobrist_hash ^= (ZOBRIST_RANDOM[index]);
+			}
 			return 0;
 		}
 	}
@@ -173,6 +178,29 @@ uint64_t hash_xor_16_add(Board *bo) {
 	return a ^ b + bo->nb_pions;
 }
 
+uint64_t hash_zobrist(Board *bo) {
+	return bo->zobrist_hash;
+}
+
+
+
+
+//From https://stackoverflow.com/questions/33010010/how-to-generate-random-64-bit-unsigned-integer-in-c
+uint64_t rand_uint64(void) {
+  uint64_t r = 0;
+  for (int i=0; i<64; i += 15 /*30*/) {
+    r = r*((uint64_t)RAND_MAX + 1) + rand();
+  }
+  return r;
+}
+
+
+void init_zobrist() {
+	srand(28600492);
+	for (int i=0;i<84;i++) {
+		ZOBRIST_RANDOM[i] = rand_uint64();
+	}
+}
 
 uint64_t hash_board(Board *bo) {
 	if (HASH_FUNCTION == BASIC_XOR) {
@@ -187,6 +215,8 @@ uint64_t hash_board(Board *bo) {
 		return hash_xor_16(bo);
 	} else if (HASH_FUNCTION == XOR_ADD_16) {
 		return hash_xor_16_add(bo);
+	} else if (HASH_FUNCTION == ZOBRIST_HASH) {
+		return hash_zobrist(bo);
 	} else {
 		printf("No hash function defined\n");
 		exit(0);
@@ -568,10 +598,12 @@ int main() {
 	bo.a = 0;
 	bo.b = 0;
 	bo.nb_pions = 0;
+	bo.zobrist_hash = 0;
 	int current_color = RED;
 	print_board(&bo);
 
-
+	printf("%lld\n",RAND_MAX);
+	
 	if (INTERACTIVE == 1) {
 
 		int col;
@@ -583,6 +615,9 @@ int main() {
 		if (USE_HASHMAP == 1) {
 			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
 			memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
+			if (HASH_FUNCTION == ZOBRIST_HASH) {
+				init_zobrist();
+			}
 		}
 
 
@@ -669,6 +704,10 @@ int main() {
 		if (USE_HASHMAP == 1) {
 			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
 			memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
+			if (HASH_FUNCTION == ZOBRIST_HASH) {
+				init_zobrist();
+			}
+
 		}
 
 

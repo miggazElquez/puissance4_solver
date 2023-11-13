@@ -9,6 +9,7 @@ typedef struct {
 	uint64_t a;
 	uint64_t b;
 	int nb_pions;
+	uint64_t zobrist_hash;
 } Board;
 
 
