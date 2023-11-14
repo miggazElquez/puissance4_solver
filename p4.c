@@ -30,6 +30,7 @@
 typedef struct {
    Board bo;
    int value;
+   int cut;
 } HashMap_Val;
 
 uint64_t ZOBRIST_RANDOM[84];
@@ -129,8 +130,7 @@ int win_check2(Board *bo, int color,int col,int row, int *score, Board *** Pions
 			}
 			p++;
 		}
-	}
-	else{
+	} else {
 		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
 			TestBoard.a=(PionsMask[col][row][p].a<<1) & bo->a;
 			TestBoard.b=(PionsMask[col][row][p].b<<1) & bo->b;
@@ -247,6 +247,8 @@ int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const in
 		return score;
 	}
 
+	int cutoff = 0;
+
 	for (int col=0;col<7;col++) {
 		Board temp = *bo;
 		int rowtemp;
@@ -257,8 +259,18 @@ int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const in
 			uint64_t hash = hash_board(&temp) % HASHMAP_SIZE;
 			HashMap_Val h = hash_map[hash];
 			if (h.bo.a == temp.a && h.bo.b == temp.b) {
-				val = h.value;
-				HIT++;
+				if (h.cut) {
+					if (h.value >= score) {
+						HIT++;
+						val = h.value;
+					} else {
+						val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+						MISS++;
+					}
+				} else {
+					val = h.value;
+					HIT++;
+				}
 			} else {
 				val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
 				MISS++;
@@ -269,9 +281,11 @@ int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const in
 
 		if (val < score) {
 			score = val;
-			if (score <= beta)
-				goto end_function;
 			if (score == -1) {
+				goto end_function;
+			}
+			if (score <= beta) {
+				cutoff = 1;
 				goto end_function;
 			}
 		}
@@ -283,6 +297,7 @@ end_function:
 		uint64_t hash = hash_board(bo) % HASHMAP_SIZE;
 		hash_map[hash].bo = *bo;
 		hash_map[hash].value = score;
+		hash_map[hash].cut = cutoff; // if the value is cut_min
 	}
 	return score;
 
@@ -301,6 +316,7 @@ int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const i
 		return score;
 	}
 
+	int cutoff = 0;
 	for (int col=0;col<7;col++) {
 		Board temp = *bo;
 		int rowtemp;
@@ -311,8 +327,18 @@ int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const i
 			uint64_t hash = hash_board(&temp) % HASHMAP_SIZE;
 			HashMap_Val h = hash_map[hash];
 			if (h.bo.a == temp.a && h.bo.b == temp.b) {
-				val = h.value;
-				HIT++;
+				if (h.cut) {
+					if (h.value <= score) {
+						HIT++;
+						val = h.value; //voir `continue` ?
+					} else {
+						val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+						MISS++;
+					}
+				} else {
+					val = h.value;
+					HIT++;
+				}
 			} else {
 				val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
 				MISS++;
@@ -323,11 +349,14 @@ int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const i
 
 		if (val > score) {
 			score = val;
-			if (score >= alpha)
-				goto end_function;
-
 			if (score == 1)
 				goto end_function;
+
+			if (score >= alpha){
+				cutoff = 1;
+				goto end_function;
+			}
+
 		}
 	}
 
@@ -336,6 +365,7 @@ end_function:
 		uint64_t hash = hash_board(bo) % HASHMAP_SIZE;
 		hash_map[hash].value = score;
 		hash_map[hash].bo = *bo;
+		hash_map[hash].cut = cutoff;
 	}
 
 	// printf("-> max, depth : %d, score : %d\n",depth,score);
