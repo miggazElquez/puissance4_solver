@@ -5,27 +5,32 @@
 #include <time.h>
 #include <sys/time.h>
 #include <pthread.h>
+#include <getopt.h>
 
 #include "Board.h"
 
-
-#define MULTITHREADING 0
-#define INTERACTIVE 0
-#define MAX_DEPTH 13
-#define USE_HASHMAP 1
+// Optimization flags
+#define MULTITHREADING 	0
+#define USE_HASHMAP 	1
 
 //Hash map
-#define HASHMAP_SIZE  65536 //must be a power of two
 //different types of hash function
-#define BASIC_XOR 1
-#define XOR_ADD 2
-#define XOR_32 3
-#define XOR_ADD_32 4
-#define XOR_16 5
-#define XOR_ADD_16 6
-#define ZOBRIST_HASH 7
+#define BASIC_XOR 		1
+#define XOR_ADD 		2
+#define XOR_32 			3
+#define XOR_ADD_32 		4
+#define XOR_16 			5
+#define XOR_ADD_16 		6
+#define ZOBRIST_HASH 	7
 
 #define HASH_FUNCTION ZOBRIST_HASH //Use one of the defined Hash
+
+/* Global parameters */
+static uint8_t maxDepth = 11;
+static uint8_t isInteractive = 1;
+static uint8_t csvOutput = 0;
+static uint32_t hmapSize = 65536;
+static uint32_t hmapSizeMask = 65536 - 1;
 
 typedef struct {
    Board bo;
@@ -227,7 +232,7 @@ uint64_t hash_board(Board *bo) {
 
 ///////////////
 
-volatile uint64_t N = 0;
+volatile uint64_t NODES = 0;
 uint64_t HIT = 0;
 uint64_t MISS = 0;
 
@@ -241,7 +246,7 @@ int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const in
 	// printf("min, depth : %d\n",depth);
 	// print_board(bo);
 
-	N++;
+	NODES++;
 	
 	if (win_check2(bo,RED,colR,row,&score,PionsMask)) {
 		return score;
@@ -256,7 +261,7 @@ int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const in
 
 		int val;
 		if (USE_HASHMAP == 1) {
-			uint64_t hash = hash_board(&temp) % HASHMAP_SIZE;
+			uint64_t hash = hash_board(&temp) & hmapSizeMask;
 			HashMap_Val h = hash_map[hash];
 			if (h.bo.a == temp.a && h.bo.b == temp.b) {
 				if (h.cut) {
@@ -294,7 +299,7 @@ int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const in
 	// printf("-> min, depth : %d, score : %d\n",depth,score);
 end_function:
 	if (USE_HASHMAP == 1) {
-		uint64_t hash = hash_board(bo) % HASHMAP_SIZE;
+		uint64_t hash = hash_board(bo) & hmapSizeMask;
 		hash_map[hash].bo = *bo;
 		hash_map[hash].value = score;
 		hash_map[hash].cut = cutoff; // if the value is cut_min
@@ -307,9 +312,9 @@ int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const i
 	// printf("max, depth : %d\n",depth);
 	// print_board(bo);
 
-	N++;
+	NODES++;
 
-	if (depth>MAX_DEPTH) return 0;
+	if (depth > maxDepth) return 0;
 	int score = -2;
 
 	if (win_check2(bo,YELLOW,colR,row,&score,PionsMask)) {
@@ -324,7 +329,7 @@ int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const i
 
 		int val;
 		if (USE_HASHMAP == 1) {
-			uint64_t hash = hash_board(&temp) % HASHMAP_SIZE;
+			uint64_t hash = hash_board(&temp) & hmapSizeMask;
 			HashMap_Val h = hash_map[hash];
 			if (h.bo.a == temp.a && h.bo.b == temp.b) {
 				if (h.cut) {
@@ -362,7 +367,7 @@ int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const i
 
 end_function:
 	if (USE_HASHMAP == 1) {
-		uint64_t hash = hash_board(bo) % HASHMAP_SIZE;
+		uint64_t hash = hash_board(bo) & hmapSizeMask;
 		hash_map[hash].value = score;
 		hash_map[hash].bo = *bo;
 		hash_map[hash].cut = cutoff;
@@ -397,7 +402,8 @@ void *start_search(void *arg) {
 		val = max(&temp,0,2,a->PionsMask,a->i,row,NULL); //same
 	}
 
-	printf("	%d : %d\n",a->i,val);
+	if (!csvOutput)
+		printf("	%d : %d\n",a->i,val);
 	a->res[a->i] = val;
 
 }
@@ -452,7 +458,8 @@ int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask,HashMap_
 				int rowtemp;
 				if (insert(&temp,col,RED,&rowtemp)) continue;
 				int val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
-				printf("	%d : %d\n",col,val);
+				if (!csvOutput)
+					printf("	%d : %d\n",col,val);
 				if (val > score) {
 					score = val;
 					coup = col;
@@ -469,7 +476,8 @@ int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask,HashMap_
 				int rowtemp;
 				if (insert(&temp,col,YELLOW,&rowtemp)) continue;
 				int val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
-				printf("	%d : %d\n",col,val);
+				if (!csvOutput)
+					printf("	%d : %d\n",col,val);
 				if (val < score) {
 					score = val;
 					coup = col;
@@ -526,7 +534,8 @@ int InitMask(Board *** PionsMask){
 	}		
 		
 		
-	printf("Masque crées\n");
+	if (!csvOutput)
+		printf("Masque crées\n");
 
 //Affichage des masques 
 /*
@@ -618,24 +627,48 @@ int freeMask(Board *** PionsMask){
 }
 
 
+int main(int argc, char *argv[]) {
+	extern char *optarg;
+	int c;
 
+	while ((c = getopt(argc, argv, "sfd:h:")) != -1) {
+		switch (c) {
+			case 'f': isInteractive = 0; break;
+			case 's': csvOutput = 1; break;
+			case 'h': {
+				uint8_t tmp_hms = strtoul(optarg, NULL, 10);
+				if (tmp_hms) {
+					hmapSize = 1 << tmp_hms;
+					hmapSizeMask = hmapSize - 1;
+				}
+				break;
+			}
+			case 'd': {
+				uint8_t tmp_depth = strtoul(optarg, NULL, 10);
+				if (tmp_depth)
+					maxDepth = tmp_depth;
+				break;	
+			}
+			default:
+				break;
+		}
+	}
 
+	uint64_t val = 0;
+	Board bo = {
+		.a = 0,
+		.b = 0,
+		.nb_pions = 0,
+		.zobrist_hash = 0
+	};
 
-
-int main() {
-	uint64_t val = 0x0000000000000000;
-	Board bo;
-	bo.a = 0;
-	bo.b = 0;
-	bo.nb_pions = 0;
-	bo.zobrist_hash = 0;
 	int current_color = RED;
-	print_board(&bo);
+	if (!csvOutput || isInteractive) {
+		print_board(&bo);
+		printf("RAND_MAX = %lld\n", RAND_MAX);
+	}
 
-	printf("%lld\n",RAND_MAX);
-	
-	if (INTERACTIVE == 1) {
-
+	if (isInteractive) {
 		int col;
 		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
 		InitMask(PionsMask);
@@ -643,13 +676,12 @@ int main() {
 		HashMap_Val *hash_map;
 
 		if (USE_HASHMAP == 1) {
-			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
-			memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
+			hash_map = malloc(hmapSize * sizeof(HashMap_Val));
+			memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
 			if (HASH_FUNCTION == ZOBRIST_HASH) {
 				init_zobrist();
 			}
 		}
-
 
 		while (1) {
 			int scores[7];
@@ -659,20 +691,19 @@ int main() {
 			
 			clock_t start, end;
 			
-			N = 0;
+			NODES = 0;
 			struct timeval start_i;
 			gettimeofday(&start_i,NULL);
 			printf("Lancement ...\n");
 			start = clock();
 			
 			if (USE_HASHMAP == 1) {
-				memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
+				memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
 				HIT = 0;
 				MISS = 0;
 			}
 			int coup = cout_coup(&bo, RED, &score,PionsMask,hash_map);
 
-			
 			end = clock();
 
 			struct timeval end_i;
@@ -681,25 +712,21 @@ int main() {
 			double time = (end - start) / (double)CLOCKS_PER_SEC;
 
 			printf("Wall time : %ds\n",end_i.tv_sec - start_i.tv_sec);
-			printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
+			printf("calculated %lu nodes in %fs (%e nodes/s)\n", NODES, time, NODES/time);
 			printf("%d HIT, %f%\n",HIT, HIT / (float)(HIT+MISS) * 100);
 			if (USE_HASHMAP == 1) {
 				int count = 0;
-				for (int i=0;i<HASHMAP_SIZE;i++) {
+				for (int i=0;i<hmapSize;i++) {
 					if (hash_map[i].bo.a != 0 || hash_map[i].bo.b != 0) {
 						count++;
 					}
 				}
-				printf("count : %d (%f%)\n",count, (float)count / HASHMAP_SIZE * 100);
+				printf("count : %d (%f%)\n",count, (float)count / hmapSize * 100);
 			}
 
 			printf("played %d\n",coup);
 			printf("nb_pions:%d\n",bo.nb_pions);
 			insert(&bo, coup,RED,&row);
-
-
-
-
 
 			print_board(&bo);
 			
@@ -723,7 +750,6 @@ int main() {
 			}
 		}
 	} else {
-
 		int scores[7];
 
 		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
@@ -732,44 +758,54 @@ int main() {
 		HashMap_Val *hash_map;
 
 		if (USE_HASHMAP == 1) {
-			hash_map = malloc(HASHMAP_SIZE * sizeof(HashMap_Val));
-			memset(hash_map,0,HASHMAP_SIZE * sizeof(HashMap_Val));
+			hash_map = malloc(hmapSize * sizeof(HashMap_Val));
+			memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
 			if (HASH_FUNCTION == ZOBRIST_HASH) {
 				init_zobrist();
 			}
 
 		}
 
-
-
 		clock_t start, end;
 
-		N = 0;
+		NODES = 0;
+
 		struct timeval start_i;
 		gettimeofday(&start_i,NULL);
 		start = clock();
-		int coup = cout_coup(&bo, RED, scores,PionsMask,hash_map);
-		end = clock();
 
+		int coup = cout_coup(&bo, RED, scores, PionsMask, hash_map);
+
+		end = clock();
 		struct timeval end_i;
 		gettimeofday(&end_i,NULL);
 
 		double time = (end - start) / (double)CLOCKS_PER_SEC;
+		int wall_time = end_i.tv_sec - start_i.tv_sec;
+		double nodes_p_s = NODES / (double) time;
+		double hit_rate = HIT / (double) (HIT + MISS);
 
-		printf("Wall time : %ds\n",end_i.tv_sec - start_i.tv_sec);
-		printf("calculated %lu nodes in %fs (%e nodes/s)\n",N,time,N/time);
-		printf("%d HIT, %f%\n",HIT, HIT / (float)(HIT+MISS) * 100);
+		if (csvOutput) {
+			printf("wall_time,nodes_calculated,time,nodes_p_s,hits,hit_rate\n");
+			printf("%d,%lu,%f,%e,%d,%f\n", wall_time, NODES, time, nodes_p_s, HIT, hit_rate);
+		} else {
+			printf("Wall time : %ds\n", wall_time);
+			printf("calculated %lu nodes in %fs (%e nodes/s)\n", NODES, time, nodes_p_s);
+			printf("%d HIT, %f%\n", HIT, hit_rate * 100);
+		}
+
 		if (USE_HASHMAP == 1) {
 			int count = 0;
-			for (int i=0;i<HASHMAP_SIZE;i++) {
+			for (int i=0;i<hmapSize;i++) {
 				if (hash_map[i].bo.a != 0 || hash_map[i].bo.b != 0) {
 					count++;
 				}
 			}
-			printf("count : %d (%f%)\n",count, (float)count / HASHMAP_SIZE * 100);
+			if (!csvOutput)
+				printf("count : %d (%f%)\n",count, (float)count / hmapSize * 100);
 		}
 
-		printf("%d\n",coup);
-
+		if (!csvOutput)
+			printf("%d\n",coup);
 	}
 }
