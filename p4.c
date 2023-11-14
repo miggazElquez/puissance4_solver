@@ -11,7 +11,7 @@
 
 // Optimization flags
 #define MULTITHREADING 	0
-#define USE_HASHMAP 	1
+#define USE_HASHMAP 	0
 
 //Hash map
 //different types of hash function
@@ -115,31 +115,33 @@ int win_check(Board *bo, int color, int *score) {
 	return 0;
 }
 
-int win_check2(Board *bo, int color,int col,int row, int *score, Board *** PionsMask) {
+int win_check2(Board *bo, int color,int col,int row, int *score, Board ** PionsMask) {
 	int res = color==RED?1:-1;
 	int draw = 1;
 	int p=0;
-
+	
+	
 	Board TestBoard;
 	if(bo->nb_pions+1==42){
 		*score = 0;
 		return 1;
 	}
+	int colrow = col*6+row;
 	if(color==RED){
-		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
-			TestBoard.a=PionsMask[col][row][p].a & bo->a;
-			TestBoard.b=PionsMask[col][row][p].b & bo->b;
-			if((TestBoard.a==PionsMask[col][row][p].a)&&(TestBoard.b==PionsMask[col][row][p].b)){
+		while((PionsMask[colrow][p].a>0) || (PionsMask[colrow][p].b>0)){
+			TestBoard.a=PionsMask[colrow][p].a & bo->a;
+			TestBoard.b=PionsMask[colrow][p].b & bo->b;
+			if((TestBoard.a==PionsMask[colrow][p].a)&&(TestBoard.b==PionsMask[colrow][p].b)){
 				*score = res;
 				return 1;
 			}
 			p++;
 		}
 	} else {
-		while((PionsMask[col][row][p].a>0) || (PionsMask[col][row][p].b>0)){
-			TestBoard.a=(PionsMask[col][row][p].a<<1) & bo->a;
-			TestBoard.b=(PionsMask[col][row][p].b<<1) & bo->b;
-			if((TestBoard.a==(PionsMask[col][row][p].a<<1))&&(TestBoard.b==(PionsMask[col][row][p].b<<1))){
+		while((PionsMask[colrow][p].a>0) || (PionsMask[colrow][p].b>0)){
+			TestBoard.a=(PionsMask[colrow][p].a<<1) & bo->a;
+			TestBoard.b=(PionsMask[colrow][p].b<<1) & bo->b;
+			if((TestBoard.a==(PionsMask[colrow][p].a<<1))&&(TestBoard.b==(PionsMask[colrow][p].b<<1))){
 				*score = res;
 				return 1;
 			}
@@ -240,8 +242,8 @@ uint64_t MISS = 0;
 
 //////////////////////////
 
-int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row,HashMap_Val *hash_map);
-int min(Board *bo,int depth,int beta,Board *** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Yellow to play
+int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map);
+int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Yellow to play
 	int score = 2;
 	// printf("min, depth : %d\n",depth);
 	// print_board(bo);
@@ -308,7 +310,7 @@ end_function:
 
 }
 
-int max(Board *bo,int depth,int alpha,Board *** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Red to play
+int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Red to play
 	// printf("max, depth : %d\n",depth);
 	// print_board(bo);
 
@@ -382,7 +384,7 @@ struct search_args {
 	int i;
 	int current_color;
 	int *res;
-	Board *** PionsMask;
+	Board ** PionsMask;
 };
 
 
@@ -409,7 +411,7 @@ void *start_search(void *arg) {
 }
 
 
-int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask,HashMap_Val *hash_map) {
+int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_Val *hash_map) {
 	if (MULTITHREADING == 1) {
 //Multithreaded version
 		pthread_t threads[7];
@@ -494,9 +496,7 @@ int cout_coup(Board *bo,int current_color, int* res,Board *** PionsMask,HashMap_
 
 
 
-int InitMask(Board *** PionsMask){
-	for(int i=0;i<7;i++)
-		PionsMask[i] =  (Board**)malloc(6*sizeof(Board*));
+int InitMask(Board ** PionsMask){
 	Board boV[3][7]={0};
 	Board boH[4][6]={0};
 	//DP pour diagonale positive 
@@ -608,23 +608,18 @@ int InitMask(Board *** PionsMask){
 			/*for(int i=0;i<12;i++){
 				print_board(&TempMask[i]);
 			}*/
-			
+			int colrow = col*6 +row;
 			//fin de l'explo de tous les masques 
-			PionsMask[col][row]=(Board*)malloc(14*sizeof(Board));
-			memset(PionsMask[col][row],0,14*sizeof(Board));
-			memcpy(PionsMask[col][row],TempMask,14*sizeof(Board));
+			PionsMask[colrow]=(Board*)malloc(14*sizeof(Board));
+			memset(PionsMask[colrow],0,14*sizeof(Board));
+			memcpy(PionsMask[colrow],TempMask,14*sizeof(Board));
 			memset(TempMask,0,14*sizeof(Board));
 			
 		}
 	}
 	return 1;
 }
-int freeMask(Board *** PionsMask){
-	for(int col=0;col<7;col++)
-		for(int row=0;row<6;row++)
-			free(PionsMask[col][row]);
-	return 1;
-}
+
 
 
 int main(int argc, char *argv[]) {
@@ -670,7 +665,7 @@ int main(int argc, char *argv[]) {
 
 	if (isInteractive) {
 		int col;
-		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
+		Board ** PionsMask = (Board**)malloc(7*6*sizeof(Board*));
 		InitMask(PionsMask);
 
 		HashMap_Val *hash_map;
@@ -752,7 +747,7 @@ int main(int argc, char *argv[]) {
 	} else {
 		int scores[7];
 
-		Board *** PionsMask = (Board***)malloc(7*sizeof(Board**));
+		Board ** PionsMask = (Board**)malloc(7*6*sizeof(Board*));
 		InitMask(PionsMask);
 
 		HashMap_Val *hash_map;
