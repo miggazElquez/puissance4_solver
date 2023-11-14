@@ -610,9 +610,9 @@ int InitMask(Board ** PionsMask){
 			}*/
 			int colrow = col*6 +row;
 			//fin de l'explo de tous les masques 
-			PionsMask[colrow]=(Board*)malloc(14*sizeof(Board));
-			memset(PionsMask[colrow],0,14*sizeof(Board));
-			memcpy(PionsMask[colrow],TempMask,14*sizeof(Board));
+			PionsMask[colrow]=(Board*)malloc((cptNbmask+1)*sizeof(Board));
+			memset(PionsMask[colrow],0,(cptNbmask+1)*sizeof(Board));
+			memcpy(PionsMask[colrow],TempMask,(cptNbmask+1)*sizeof(Board));
 			memset(TempMask,0,14*sizeof(Board));
 			
 		}
