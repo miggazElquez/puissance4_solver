@@ -25,6 +25,12 @@
 
 #define HASH_FUNCTION ZOBRIST_HASH //Use one of the defined Hash
 
+
+#define MOST_RECENT 1
+#define LOWER_DEPTH 2
+
+#define REPLACEMENT_STRAT MOST_RECENT
+
 /* Global parameters */
 static uint8_t maxDepth = 11;
 static uint8_t isInteractive = 1;
@@ -367,9 +373,28 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 end_function:
 	if (USE_HASHMAP == 1) {
 		uint64_t hash = hash_board(bo) & hmapSizeMask;
-		hash_map[hash].bo = *bo;
-		hash_map[hash].value = score;
-		hash_map[hash].cut = cutoff;
+		int replace = 0;
+		if (REPLACEMENT_STRAT == MOST_RECENT) {
+			replace = 1;
+		} else if (REPLACEMENT_STRAT == LOWER_DEPTH) {
+			HashMap_Val h = hash_map[hash];
+			if (h.bo.a != 0 || h.bo.b != 0) {
+				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+					replace = 1;
+				} else {
+					replace = 0;
+				}
+			} else {
+				replace = 1;
+			}
+		}
+
+		if (replace) {
+			hash_map[hash].bo = *bo;
+			hash_map[hash].value = score;
+			hash_map[hash].cut = cutoff;
+		}
+
 	}
 	return score;
 
@@ -464,9 +489,25 @@ int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const in
 end_function:
 	if (USE_HASHMAP == 1) {
 		uint64_t hash = hash_board(bo) & hmapSizeMask;
-		hash_map[hash].value = score;
-		hash_map[hash].bo = *bo;
-		hash_map[hash].cut = cutoff;
+		int replace = 0;
+		if (REPLACEMENT_STRAT == MOST_RECENT) {
+			replace = 1;
+		} else if (REPLACEMENT_STRAT == LOWER_DEPTH) {
+			HashMap_Val h = hash_map[hash];
+			if (h.bo.a != 0 || h.bo.b != 0) {
+				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+					replace = 1;
+				} else {
+					replace = 0;
+				}
+			}
+		}
+
+		if (replace) {
+			hash_map[hash].bo = *bo;
+			hash_map[hash].value = score;
+			hash_map[hash].cut = cutoff;
+		}
 	}
 
 	// printf("-> max, depth : %d, score : %d\n",depth,score);
