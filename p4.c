@@ -29,7 +29,7 @@
 #define MOST_RECENT 1
 #define LOWER_DEPTH 2
 
-#define REPLACEMENT_STRAT MOST_RECENT
+#define REPLACEMENT_STRAT LOWER_DEPTH
 
 /* Global parameters */
 static uint8_t maxDepth = 11;
@@ -596,7 +596,36 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 				Board temp = *bo;
 				int rowtemp;
 				if (insert(&temp,col,RED,&rowtemp)) continue;
-				int val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+
+				int val;
+				if (USE_HASHMAP == 1) {
+					#ifdef SYM_HASH
+					uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
+					HashMap_Val h2 = hash_map[hash2];
+					uint64_t a=h2.bo.a, b=h2.bo.b;
+					compute_sym(&a,&b);
+					if (a == temp.a && b == temp.b) {
+						SYM_HIT++;
+						if (h2.cut) {
+							val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+							MISS++;
+							SYM_HIT--;
+						} else {
+							val = h2.value;
+							HIT++;
+						}
+					} else {
+						val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+					}
+					#endif
+
+					#ifndef SYM_HASH
+						val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+					#endif
+				} else {
+					val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+				}
+
 				if (!csvOutput)
 					printf("	%d : %d\n",col,val);
 				if (val > score) {
@@ -610,14 +639,46 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 		} else {
 			int score = 2;
 			int coup;
+			int depth = 0;
 			for (int col=0;col<7;col++) {
 				Board temp = *bo;
 				int rowtemp;
 				if (insert(&temp,col,YELLOW,&rowtemp)) continue;
-				int val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
+
+				int val;
+				if (USE_HASHMAP == 1) {
+					#ifdef SYM_HASH
+					uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
+					HashMap_Val h2 = hash_map[hash2];
+					
+					uint64_t a=h2.bo.a, b=h2.bo.b;
+					compute_sym(&a,&b);
+					if (a == temp.a && b == temp.b) {
+						SYM_HIT++;
+						if (h2.cut) {
+							val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
+							MISS++;
+							SYM_HIT--;
+						} else {
+							printf("SYM HIT, col=%d\n",col);
+							val = h2.value;
+							HIT++;
+						}
+					} else {
+						val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
+					}
+					#endif
+
+					#ifndef SYM_HASH
+					val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map); //They will not be any result in the hashmap
+					#endif
+				} else {
+					val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
+				}
+				
 				if (!csvOutput)
 					printf("	%d : %d\n",col,val);
-				if (val < score) {
+				if (val > score) {
 					score = val;
 					coup = col;
 				}
