@@ -11,7 +11,7 @@
 
 // Optimization flags
 #define MULTITHREADING 	0
-#define USE_HASHMAP 	0
+#define USE_HASHMAP 	1
 
 //Hash map
 //different types of hash function
@@ -55,6 +55,10 @@ int insert(Board *bo, int col, int color,int* rowrec ) {
 			if (USE_HASHMAP == 1 && HASH_FUNCTION == ZOBRIST_HASH) {
 				int index = (col*6 + row) * color;
 				bo->zobrist_hash ^= (ZOBRIST_RANDOM[index]);
+				#ifdef SYM_HASH
+				int index2 = ((6-col)*6 + row) * color;				
+				bo->sym_zobrist_hash ^= (ZOBRIST_RANDOM[index2]);
+				#endif
 			}
 			return 0;
 		}
@@ -190,6 +194,35 @@ uint64_t hash_zobrist(Board *bo) {
 }
 
 
+void compute_sym(uint64_t* a_, uint64_t* b_) {
+	uint64_t mask = 0xfff;
+	uint64_t temp;
+
+    uint64_t a = *a_;
+    uint64_t b = *b_;
+	
+	temp = a & mask;
+	a &= ~mask;
+	a |= (b >> 24) & mask;
+	b &= ~(mask << 24);
+	b |= temp << 24; 
+
+	temp = (a >> 12) & mask;
+	a &= ~(mask << 12);
+	a |= b & (mask << 12);
+	b &= ~(mask << 12);
+	b |= temp << 12;
+
+	temp = (a >> 24) & mask;
+	a &= ~(mask << 24);
+	a |= (b & mask) << 24;
+	b &= ~mask;
+	b |= temp;
+
+    *a_ = a;
+    *b_ = b;
+
+}
 
 
 //From https://stackoverflow.com/questions/33010010/how-to-generate-random-64-bit-unsigned-integer-in-c
@@ -237,6 +270,7 @@ uint64_t hash_board(Board *bo) {
 volatile uint64_t NODES = 0;
 uint64_t HIT = 0;
 uint64_t MISS = 0;
+uint64_t SYM_HIT = 0;
 
 
 
@@ -265,6 +299,7 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 		if (USE_HASHMAP == 1) {
 			uint64_t hash = hash_board(&temp) & hmapSizeMask;
 			HashMap_Val h = hash_map[hash];
+
 			if (h.bo.a == temp.a && h.bo.b == temp.b) {
 				if (h.cut) {
 					if (h.value >= score) {
@@ -279,8 +314,38 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 					HIT++;
 				}
 			} else {
+				#ifdef SYM_HASH
+				uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
+				HashMap_Val h2 = hash_map[hash2];
+				
+				uint64_t a=h2.bo.a, b=h2.bo.b;
+				compute_sym(&a,&b);
+
+				if (a == temp.a && b == temp.b) {
+					SYM_HIT++;
+					if (h.cut) {
+						if (h.value >= score) {
+							HIT++;
+							val = h.value;
+						} else {
+							val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+							MISS++;
+						}
+					} else {
+						val = h.value;
+						HIT++;
+					}
+
+
+				} else {
+				#endif
+
 				val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
 				MISS++;
+
+				#ifdef SYM_HASH
+				}
+				#endif
 			}
 		} else {
 			val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
@@ -304,7 +369,7 @@ end_function:
 		uint64_t hash = hash_board(bo) & hmapSizeMask;
 		hash_map[hash].bo = *bo;
 		hash_map[hash].value = score;
-		hash_map[hash].cut = cutoff; // if the value is cut_min
+		hash_map[hash].cut = cutoff;
 	}
 	return score;
 
@@ -347,8 +412,37 @@ int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const in
 					HIT++;
 				}
 			} else {
+				#ifdef SYM_HASH
+				uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
+				HashMap_Val h2 = hash_map[hash2];
+				
+				uint64_t a=h2.bo.a, b=h2.bo.b;
+				compute_sym(&a,&b);
+				if (a == temp.a && b == temp.b) {
+					SYM_HIT++;
+					if (h.cut) {
+						if (h.value <= score) {
+							HIT++;
+							val = h.value;
+						} else {
+							val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+							MISS++;
+						}
+					} else {
+						val = h.value;
+						HIT++;
+					}
+
+
+				} else {
+				#endif
+
 				val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
 				MISS++;
+
+				#ifdef SYM_HASH
+				}
+				#endif
 			}
 		} else {
 			val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
@@ -660,7 +754,6 @@ int main(int argc, char *argv[]) {
 	int current_color = RED;
 	if (!csvOutput || isInteractive) {
 		print_board(&bo);
-		printf("RAND_MAX = %lld\n", RAND_MAX);
 	}
 
 	if (isInteractive) {
@@ -696,6 +789,7 @@ int main(int argc, char *argv[]) {
 				memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
 				HIT = 0;
 				MISS = 0;
+				SYM_HIT = 0;
 			}
 			int coup = cout_coup(&bo, RED, &score,PionsMask,hash_map);
 
@@ -709,6 +803,9 @@ int main(int argc, char *argv[]) {
 			printf("Wall time : %ds\n",end_i.tv_sec - start_i.tv_sec);
 			printf("calculated %lu nodes in %fs (%e nodes/s)\n", NODES, time, NODES/time);
 			printf("%d HIT, %f%\n",HIT, HIT / (float)(HIT+MISS) * 100);
+			#ifdef SYM_HASH
+			printf("%d SYM_HIT,%f%\n",SYM_HIT,SYM_HIT / (float)(HIT+MISS) * 100);
+			#endif
 			if (USE_HASHMAP == 1) {
 				int count = 0;
 				for (int i=0;i<hmapSize;i++) {
@@ -779,14 +876,20 @@ int main(int argc, char *argv[]) {
 		int wall_time = end_i.tv_sec - start_i.tv_sec;
 		double nodes_p_s = NODES / (double) time;
 		double hit_rate = HIT / (double) (HIT + MISS);
+		double sym_hit_rate = SYM_HIT / (double) (HIT + MISS);
+
 
 		if (csvOutput) {
-			printf("wall_time,nodes_calculated,time,nodes_p_s,hits,hit_rate\n");
-			printf("%d,%lu,%f,%e,%d,%f\n", wall_time, NODES, time, nodes_p_s, HIT, hit_rate);
+			printf("wall_time,nodes_calculated,time,nodes_p_s,hits,hit_rate,sym_hit_rate\n");
+			printf("%d,%lu,%f,%e,%d,%f,%f\n", wall_time, NODES, time, nodes_p_s, HIT, hit_rate,sym_hit_rate);
 		} else {
 			printf("Wall time : %ds\n", wall_time);
 			printf("calculated %lu nodes in %fs (%e nodes/s)\n", NODES, time, nodes_p_s);
 			printf("%d HIT, %f%\n", HIT, hit_rate * 100);
+			#ifdef SYM_HASH
+			printf("%d SYM_HIT,%f%\n",SYM_HIT,SYM_HIT / (float)(HIT+MISS) * 100);
+			#endif
+
 		}
 
 		if (USE_HASHMAP == 1) {
