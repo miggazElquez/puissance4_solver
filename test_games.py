@@ -19,7 +19,7 @@ def input_to_bytes(lst):
 
 
 def play_game(inp):
-	proc = subprocess.run(["./p4"],input=input_to_bytes(inp), capture_output=True)
+	proc = subprocess.run(["./p4", "-d", "5"],input=input_to_bytes(inp), capture_output=True)
 	lines = proc.stdout.decode("utf-8").split('\n')
 	if lines[-3] != "FIN DE PARTIE":
 		print(f"error on game {inp}")
@@ -52,7 +52,6 @@ def check_games(filename):
 
 
 if __name__ == '__main__':
-	print("Please make sure game is in interactive mode, with DEPTH=5")
 	if len(sys.argv) < 2 or (sys.argv[1] == "gen" and len(sys.argv) != 4):
 		print("Usage : ./test_games.py <filename>\n        ./test_games.py gen <n> <filename>")
 		exit(1)
