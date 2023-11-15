@@ -1,4 +1,4 @@
-C_ARGS= -O3 -g -flto
+C_ARGS= -O3 -g -flto -march=native
 
 p4: p4.c Board.h  Board.o
 	gcc p4.c Board.o -o p4 $(C_ARGS)
