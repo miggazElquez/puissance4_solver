@@ -329,13 +329,14 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 
 				if (a == temp.a && b == temp.b) {
 					SYM_HIT++;
-					if (h.cut) {
-						if (h.value >= score) {
+					if (h2.cut) {
+						if (h2.value >= score) {
 							HIT++;
-							val = h.value;
+							val = h2.value;
 						} else {
 							val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
 							MISS++;
+							SYM_HIT--;
 						}
 					} else {
 						val = h.value;
@@ -445,13 +446,14 @@ int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const in
 				compute_sym(&a,&b);
 				if (a == temp.a && b == temp.b) {
 					SYM_HIT++;
-					if (h.cut) {
-						if (h.value <= score) {
+					if (h2.cut) {
+						if (h2.value <= score) {
 							HIT++;
-							val = h.value;
+							val = h2.value;
 						} else {
 							val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
 							MISS++;
+							SYM_HIT--;
 						}
 					} else {
 						val = h.value;
