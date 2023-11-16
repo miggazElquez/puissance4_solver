@@ -62,9 +62,11 @@ if __name__ == "__main__":
 
     fig, axs = plt.subplots(2)
 
-    cutoff = range(0,19);
-    for c in cutoff:
-        data = benchmark(5,("hit_rate","time"),("max","min"),d=13,c=c)
+    cutoff = range(0,12);
+    hash_sizes = range(13,26)
+    for c in hash_sizes:
+        print(c)
+        data = benchmark(1,("hit_rate","time"),("max","min"),d=13,h=c)
         hit_rates.append(data["hit_rate"])
         times.append(data["time"])
 
@@ -73,12 +75,12 @@ if __name__ == "__main__":
     # axs[0].set_ylabel("Taux de hit  (%)")
 
 
-    axs[1].plot(cutoff,hit_rates)
-    axs[1].set_xlabel("cutoff value")
+    axs[1].plot(hash_sizes,hit_rates)
+    axs[1].set_xlabel("hash_table size")
     axs[1].set_ylabel("Taux de hit  (%)")
 
-    axs[0].plot(cutoff,times)
-    axs[0].set_xlabel("cutoff value")
+    axs[0].plot(hash_sizes,times)
+    axs[0].set_xlabel("hash_table size")
     axs[0].set_ylabel("Temps (s)")
 
 

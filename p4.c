@@ -29,9 +29,10 @@
 #define MOST_RECENT 1
 #define LOWER_DEPTH 2
 #define RECENT_AND_DEPTH 3
+#define TWO_TIER 4
 
 
-#define REPLACEMENT_STRAT RECENT_AND_DEPTH
+#define REPLACEMENT_STRAT TWO_TIER
 
 /* Global parameters */
 static uint8_t maxDepth = 11;
@@ -280,13 +281,15 @@ volatile uint64_t NODES = 0;
 uint64_t HIT = 0;
 uint64_t MISS = 0;
 uint64_t SYM_HIT = 0;
+uint64_t HIT1 = 0;
+uint64_t HIT2 = 0;
 
 
 
 //////////////////////////
 
-int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map);
-int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Yellow to play
+int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map,HashMap_Val *hash_map2);
+int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map,HashMap_Val *hash_map2) { //Yellow to play
 	int score = 2;
 	// printf("min, depth : %d\n",depth);
 	// print_board(bo);
@@ -305,60 +308,87 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 		if (insert(&temp,col,YELLOW,&rowtemp)) continue;
 
 		int val;
+		int hit = 0;
 		if (USE_HASHMAP == 1) {
 			uint64_t hash = hash_board(&temp) & hmapSizeMask;
-			HashMap_Val h = hash_map[hash];
 
-			if (h.bo.a == temp.a && h.bo.b == temp.b) {
-				if (h.cut) {
-					if (h.value >= score) {
-						HIT++;
-						val = h.value;
-					} else {
-						val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
-						MISS++;
-					}
-				} else {
-					val = h.value;
-					HIT++;
-				}
-			} else {
-				#ifdef SYM_HASH
-				uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
-				HashMap_Val h2 = hash_map[hash2];
-				
-				uint64_t a=h2.bo.a, b=h2.bo.b;
-				compute_sym(&a,&b);
+			int n_hash_tables = 1;
+			if (REPLACEMENT_STRAT == TWO_TIER) n_hash_tables = 2;
 
-				if (a == temp.a && b == temp.b) {
-					SYM_HIT++;
-					if (h2.cut) {
-						if (h2.value >= score) {
-							HIT++;
-							val = h2.value;
+			for (int i=0;i<n_hash_tables;i++) {
+				HashMap_Val h;
+				if (i == 0)
+					h = hash_map[hash];
+				else if (i == 1)
+					h = hash_map2[hash];
+
+				if (h.bo.a == temp.a && h.bo.b == temp.b) {
+					if (h.cut) {
+						if (h.value >= score) {
+							val = h.value;
+							hit = 1;
 						} else {
-							val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
-							MISS++;
-							SYM_HIT--;
+							hit = 0;
 						}
 					} else {
 						val = h.value;
-						HIT++;
+						hit = 1;
 					}
-
-
 				} else {
-				#endif
+					#ifdef SYM_HASH
+					uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
 
-				val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
-				MISS++;
+					HashMap_Val h2;
+					if (i == 0)
+						h2 = hash_map[hash2];
+					else if (i == 1)
+						h2 = hash_map2[hash2];
+					
+					uint64_t a=h2.bo.a, b=h2.bo.b;
+					compute_sym(&a,&b);
 
-				#ifdef SYM_HASH
+					if (a == temp.a && b == temp.b) {
+						SYM_HIT++;
+						if (h2.cut) {
+							if (h2.value >= score) {
+								val = h2.value;
+								hit = 1;
+							} else {
+								SYM_HIT--;
+								hit = 0;
+							}
+						} else {
+							val = h.value;
+							hit = 1;
+						}
+
+
+					} else {
+					#endif
+					hit = 0;
+
+					#ifdef SYM_HASH
+					}
+					#endif
 				}
-				#endif
+				if (hit == 1) {
+					
+					if (i == 0) {
+						HIT1++;
+					}
+					else {
+						HIT2++;
+					}
+					break;  //we found a value, no need to check other tables
+				}
 			}
+		}
+
+		if (hit == 0) {
+			val =  max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map,hash_map2);
+			MISS++;
 		} else {
-			val = max(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+			HIT++;
 		}
 
 		if (val < score) {
@@ -402,12 +432,35 @@ end_function:
 			} else {
 				replace = 1;
 			}
+		} else if (REPLACEMENT_STRAT == TWO_TIER) {
+			replace = 1; //First hash_map is most_recent
 		}
 
 		if (replace) {
+			//printf("	writing on 1 %ld %ld at %d\n",bo->a,bo->b,hash);
 			hash_map[hash].bo = *bo;
 			hash_map[hash].value = score;
 			hash_map[hash].cut = cutoff;
+		}
+
+		if (REPLACEMENT_STRAT == TWO_TIER) {
+			HashMap_Val h = hash_map2[hash]; // Second hash_map is lower_depth
+			if (h.bo.a != 0 || h.bo.b != 0) {
+				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+					//printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
+					hash_map2[hash].bo = *bo;
+					hash_map2[hash].value = score;
+					hash_map2[hash].cut = cutoff;
+				} else {
+					replace = 0;
+				}
+			} else {
+				//printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
+				hash_map2[hash].bo = *bo;
+				hash_map2[hash].value = score;
+				hash_map2[hash].cut = cutoff;
+			}
+
 		}
 
 	}
@@ -415,7 +468,7 @@ end_function:
 
 }
 
-int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map) { //Red to play
+int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const int row,HashMap_Val *hash_map,HashMap_Val *hash_map2) { //Red to play
 	// printf("max, depth : %d\n",depth);
 	// print_board(bo);
 
@@ -435,58 +488,87 @@ int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const in
 		if (insert(&temp,col,RED,&rowtemp)) continue;
 
 		int val;
+		int hit = 0;
 		if (USE_HASHMAP == 1) {
+
 			uint64_t hash = hash_board(&temp) & hmapSizeMask;
-			HashMap_Val h = hash_map[hash];
-			if (h.bo.a == temp.a && h.bo.b == temp.b) {
-				if (h.cut) {
-					if (h.value <= score) {
-						HIT++;
-						val = h.value; //voir `continue` ?
-					} else {
-						val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
-						MISS++;
-					}
-				} else {
-					val = h.value;
-					HIT++;
-				}
-			} else {
-				#ifdef SYM_HASH
-				uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
-				HashMap_Val h2 = hash_map[hash2];
-				
-				uint64_t a=h2.bo.a, b=h2.bo.b;
-				compute_sym(&a,&b);
-				if (a == temp.a && b == temp.b) {
-					SYM_HIT++;
-					if (h2.cut) {
-						if (h2.value <= score) {
-							HIT++;
-							val = h2.value;
+
+			int n_hash_tables = 1;
+			if (REPLACEMENT_STRAT == TWO_TIER) n_hash_tables = 2;
+
+			for (int i=0;i<n_hash_tables;i++) {
+
+				HashMap_Val h;
+				if (i == 0)
+					h = hash_map[hash];
+				else if (i == 1)
+					h = hash_map2[hash];
+
+				if (h.bo.a == temp.a && h.bo.b == temp.b) {
+					if (h.cut) {
+						if (h.value <= score) {
+							hit = 1;
+							val = h.value; //voir `continue` ?
 						} else {
-							val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
-							MISS++;
-							SYM_HIT--;
+							hit = 0;
 						}
 					} else {
 						val = h.value;
-						HIT++;
+						hit = 1;
 					}
-
-
 				} else {
-				#endif
+					#ifdef SYM_HASH
+					uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
 
-				val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
-				MISS++;
+					HashMap_Val h2;
+					if (i == 0)
+						h2 = hash_map[hash2];
+					else if (i == 2)
+						h2 = hash_map2[hash2];
+					
+					uint64_t a=h2.bo.a, b=h2.bo.b;
+					compute_sym(&a,&b);
+					if (a == temp.a && b == temp.b) {
+						SYM_HIT++;
+						if (h2.cut) {
+							if (h2.value <= score) {
+								hit = 1;
+								val = h2.value;
+							} else {
+								hit = 0;
+								SYM_HIT--;
+							}
+						} else {
+							val = h.value;
+							hit = 1;
+						}
 
-				#ifdef SYM_HASH
+					} else {
+					#endif
+
+					hit = 0;
+
+					#ifdef SYM_HASH
+					}
+					#endif
 				}
-				#endif
+
+				if (hit == 1) {
+					if (i == 0)
+						HIT1++;
+					else{
+						HIT2++;
+					}
+					break; //we found a value, no need to check other tables
+				}
 			}
+		}
+
+		if (hit == 0) {
+			val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map,hash_map2);
+			MISS++;
 		} else {
-			val = min(&temp,depth+1,score,PionsMask,col,rowtemp,hash_map);
+			HIT++;
 		}
 
 		if (val > score) {
@@ -530,6 +612,8 @@ end_function:
 			} else {
 				replace = 1;
 			}
+		} else if (REPLACEMENT_STRAT == TWO_TIER) {
+			replace = 1; //First hash_map is most_recent
 		}
 
 
@@ -538,6 +622,27 @@ end_function:
 			hash_map[hash].value = score;
 			hash_map[hash].cut = cutoff;
 		}
+
+		if (REPLACEMENT_STRAT == TWO_TIER) {
+			HashMap_Val h = hash_map2[hash]; // Second hash_map is lower_depth
+			if (h.bo.a != 0 || h.bo.b != 0) {
+				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+//					printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
+					hash_map2[hash].bo = *bo;
+					hash_map2[hash].value = score;
+					hash_map2[hash].cut = cutoff;
+				} else {
+					replace = 0;
+				}
+			} else {
+//				printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
+				hash_map2[hash].bo = *bo;
+				hash_map2[hash].value = score;
+				hash_map2[hash].cut = cutoff;
+			}
+
+		}
+
 	}
 
 	// printf("-> max, depth : %d, score : %d\n",depth,score);
@@ -564,9 +669,9 @@ void *start_search(void *arg) {
 
 	int val;
 	if (a->current_color == RED) {
-		val = min(&temp,0,-2,a->PionsMask,a->i,row,NULL); //-2 to not have alpha beta pruning
+		val = min(&temp,0,-2,a->PionsMask,a->i,row,NULL,NULL); //-2 to not have alpha beta pruning
 	} else {
-		val = max(&temp,0,2,a->PionsMask,a->i,row,NULL); //same
+		val = max(&temp,0,2,a->PionsMask,a->i,row,NULL,NULL); //same
 	}
 
 	if (!csvOutput)
@@ -576,7 +681,7 @@ void *start_search(void *arg) {
 }
 
 
-int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_Val *hash_map) {
+int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_Val *hash_map,HashMap_Val *hash_map2) {
 	if (MULTITHREADING == 1) {
 //Multithreaded version
 		pthread_t threads[7];
@@ -635,7 +740,7 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 					if (a == temp.a && b == temp.b) {
 						SYM_HIT++;
 						if (h2.cut) {
-							val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+							val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map,hash_map2);
 							MISS++;
 							SYM_HIT--;
 						} else {
@@ -643,15 +748,15 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 							HIT++;
 						}
 					} else {
-						val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+						val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map,hash_map2);
 					}
 					#endif
 
 					#ifndef SYM_HASH
-						val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+						val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map,hash_map2);
 					#endif
 				} else {
-					val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map);
+					val = min(&temp,0,-2,PionsMask,col,rowtemp,hash_map,hash_map2);
 				}
 
 				if (!csvOutput)
@@ -684,7 +789,7 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 					if (a == temp.a && b == temp.b) {
 						SYM_HIT++;
 						if (h2.cut) {
-							val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
+							val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map,hash_map2);
 							MISS++;
 							SYM_HIT--;
 						} else {
@@ -693,15 +798,15 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 							HIT++;
 						}
 					} else {
-						val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
+						val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map,hash_map2);
 					}
 					#endif
 
 					#ifndef SYM_HASH
-					val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map); //They will not be any result in the hashmap
+					val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map,hash_map2); //They will not be any result in the hashmap
 					#endif
 				} else {
-					val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map);
+					val = max(&temp,0,2,PionsMask,col,rowtemp,hash_map,hash_map2);
 				}
 				
 				if (!csvOutput)
@@ -899,12 +1004,17 @@ int main(int argc, char *argv[]) {
 		InitMask(PionsMask);
 
 		HashMap_Val *hash_map;
+		HashMap_Val *hash_map2;
 
 		if (USE_HASHMAP == 1) {
 			hash_map = malloc(hmapSize * sizeof(HashMap_Val));
 			memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
 			if (HASH_FUNCTION == ZOBRIST_HASH) {
 				init_zobrist();
+			}
+			if (REPLACEMENT_STRAT == TWO_TIER) {
+				hash_map2 = malloc(hmapSize * sizeof(HashMap_Val));
+				memset(hash_map2,0,hmapSize * sizeof(HashMap_Val));
 			}
 		}
 
@@ -924,11 +1034,12 @@ int main(int argc, char *argv[]) {
 			
 			if (USE_HASHMAP == 1) {
 				memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
+				if (REPLACEMENT_STRAT == TWO_TIER) memset(hash_map2,0,hmapSize * sizeof(HashMap_Val));
 				HIT = 0;
 				MISS = 0;
 				SYM_HIT = 0;
 			}
-			int coup = cout_coup(&bo, RED, &score,PionsMask,hash_map);
+			int coup = cout_coup(&bo, RED, &score,PionsMask,hash_map,hash_map2);
 
 			end = clock();
 
@@ -940,6 +1051,8 @@ int main(int argc, char *argv[]) {
 			printf("Wall time : %ds\n",end_i.tv_sec - start_i.tv_sec);
 			printf("calculated %lu nodes in %fs (%e nodes/s)\n", NODES, time, NODES/time);
 			printf("%d HIT, %f%\n",HIT, HIT / (float)(HIT+MISS) * 100);
+			printf("%d HIT1, %f%\n",HIT1, HIT1 / (double)(HIT+MISS)* 100);
+			printf("%d HIT2, %f%\n",HIT2, HIT2 / (double)(HIT+MISS)* 100);
 			#ifdef SYM_HASH
 			printf("%d SYM_HIT,%f%\n",SYM_HIT,SYM_HIT / (float)(HIT+MISS) * 100);
 			#endif
@@ -985,10 +1098,15 @@ int main(int argc, char *argv[]) {
 		InitMask(PionsMask);
 
 		HashMap_Val *hash_map;
+		HashMap_Val *hash_map2;
 
 		if (USE_HASHMAP == 1) {
 			hash_map = malloc(hmapSize * sizeof(HashMap_Val));
 			memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
+			if (REPLACEMENT_STRAT == TWO_TIER) {
+				hash_map2 = malloc(hmapSize * sizeof(HashMap_Val));
+				memset(hash_map2,0,hmapSize * sizeof(HashMap_Val));
+			}
 			if (HASH_FUNCTION == ZOBRIST_HASH) {
 				init_zobrist();
 			}
@@ -1003,7 +1121,7 @@ int main(int argc, char *argv[]) {
 		gettimeofday(&start_i,NULL);
 		start = clock();
 
-		int coup = cout_coup(&bo, RED, scores, PionsMask, hash_map);
+		int coup = cout_coup(&bo, RED, scores, PionsMask, hash_map,hash_map2);
 
 		end = clock();
 		struct timeval end_i;
@@ -1023,6 +1141,8 @@ int main(int argc, char *argv[]) {
 			printf("Wall time : %ds\n", wall_time);
 			printf("calculated %lu nodes in %fs (%e nodes/s)\n", NODES, time, nodes_p_s);
 			printf("%d HIT, %f%\n", HIT, hit_rate * 100);
+			printf("%d HIT1, %f%\n",HIT1, HIT1 / (double)(HIT+MISS)* 100);
+			printf("%d HIT2, %f%\n",HIT2, HIT2 / (double)(HIT+MISS)* 100);
 			#ifdef SYM_HASH
 			printf("%d SYM_HIT,%f%\n",SYM_HIT,SYM_HIT / (float)(HIT+MISS) * 100);
 			#endif
