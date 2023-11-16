@@ -1050,6 +1050,8 @@ int main(int argc, char *argv[]) {
 				memset(hash_map,0,hmapSize * sizeof(HashMap_Val));
 				if (REPLACEMENT_STRAT == TWO_TIER) memset(hash_map2,0,hmapSize * sizeof(HashMap_Val));
 				HIT = 0;
+				HIT1 = 0;
+				HIT2 = 0;
 				MISS = 0;
 				SYM_HIT = 0;
 			}
