@@ -34,6 +34,8 @@
 
 #define REPLACEMENT_STRAT TWO_TIER
 
+static int MOVE_ORDER[7] = {3,2,4,1,5,0,6};
+
 /* Global parameters */
 static uint8_t maxDepth = 11;
 static uint8_t isInteractive = 1;
@@ -299,7 +301,8 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 
 	int cutoff = 0;
 
-	for (int col=0;col<7;col++) {
+	for (int i=0;i<7;i++) {
+		int col = MOVE_ORDER[i];
 		Board temp = *bo;
 		int rowtemp;
 		if (insert(&temp,col,YELLOW,&rowtemp)) continue;
@@ -485,7 +488,8 @@ int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const in
 	}
 
 	int cutoff = 0;
-	for (int col=0;col<7;col++) {
+	for (int i=0;i<7;i++) {
+		int col = MOVE_ORDER[i];
 		Board temp = *bo;
 		int rowtemp;
 		if (insert(&temp,col,RED,&rowtemp)) continue;
