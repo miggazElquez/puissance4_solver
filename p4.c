@@ -58,27 +58,22 @@ int insert(Board *bo, int col, int color,int* rowrec ) {
 		printf("col trop grande\n");
 		return 1;
 	}*/
-	int row;
-	for (row =0;row<6;row++) {
-		if (get_val(bo,col,row) == EMPTY) {
-			set_val(bo,col,row,color);
-			*rowrec = row;
-			bo->nb_pions++;
-			if (USE_HASHMAP == 1 && HASH_FUNCTION == ZOBRIST_HASH) {
-				int index = (col*6 + row) * color;
-				bo->zobrist_hash ^= (ZOBRIST_RANDOM[index]);
-				#ifdef SYM_HASH
-				int index2 = ((6-col)*6 + row) * color;				
-				bo->sym_zobrist_hash ^= (ZOBRIST_RANDOM[index2]);
-				#endif
-			}
-			return 0;
-		}
+	int row = bo->end_col[col];
+	if (row == 6) return 1;
+
+	set_val(bo,col,row,color);
+	*rowrec = row;
+	bo->nb_pions++;
+	bo->end_col[col]++;
+	if (USE_HASHMAP == 1 && HASH_FUNCTION == ZOBRIST_HASH) {
+		int index = (col*6 + row) * color;
+		bo->zobrist_hash ^= (ZOBRIST_RANDOM[index]);
+		#ifdef SYM_HASH
+		int index2 = ((6-col)*6 + row) * color;				
+		bo->sym_zobrist_hash ^= (ZOBRIST_RANDOM[index2]);
+		#endif
 	}
-	if (row == 6) {
-		// printf("Column %d full\n",col);
-		return 1;
-	}
+	return 0;
 }
 
 //Check probablement lent, à améliorer
@@ -1004,6 +999,7 @@ int main(int argc, char *argv[]) {
 		.a = 0,
 		.b = 0,
 		.nb_pions = 0,
+		.end_col = {0},
 		.zobrist_hash = 0
 	};
 

@@ -11,6 +11,7 @@ typedef struct {
 	uint64_t a;
 	uint64_t b;
 	int nb_pions;
+	char end_col[7];
 	uint64_t zobrist_hash;
 #ifdef SYM_HASH
 	uint64_t sym_zobrist_hash;
