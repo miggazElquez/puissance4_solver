@@ -1,8 +1,12 @@
 import matplotlib.pyplot as plt
 import os
 
-def fetch_results(depth=1,hash_size=16):
-    output = os.popen(f"./p4 -d {depth} -f -s -h {hash_size}").read()
+def fetch_results(**kwargs):
+    command = "./p4 -f -s "
+    for (key,value) in kwargs.items():
+        command += f"-{key} {value} "
+
+    output = os.popen(command).read()
     tags = output.splitlines()[0].split(",")
     values = output.splitlines()[1].split(",")
 
@@ -12,10 +16,10 @@ def fetch_results(depth=1,hash_size=16):
 
     return data
 
-def benchmark(n, keys, orders, depth=1, hash_size=16):
+def benchmark(n, keys, orders, **kwargs):
     tmp_results = {}
     for _ in range(n):
-        r = fetch_results(depth,hash_size)
+        r = fetch_results(**kwargs)
         for key in keys:
             if not key in tmp_results:
                 tmp_results[key] = []
@@ -39,7 +43,7 @@ if __name__ == "__main__":
 
     # depths = range(1, 11, 2)
     # for depth in depths:
-    #     data = benchmark(10, ("time", "hit_rate"), ("min", "max"), depth)
+    #     data = benchmark(10, ("time", "hit_rate"), ("min", "max"), d=depth)
     #     times.append(data["time"])
     #     hit_rates.append(data["hit_rate"] * 100)
 
@@ -58,20 +62,25 @@ if __name__ == "__main__":
 
     fig, axs = plt.subplots(2)
 
-    hash_sizes = range(1,29);
-    for s in hash_sizes:
-        data = benchmark(1,("hit_rate","sym_hit_rate"),("max","max"),depth=9,hash_size=s)
-        sym_hit_rate.append(data["sym_hit_rate"])
+    cutoff = range(0,19);
+    for c in cutoff:
+        data = benchmark(5,("hit_rate","time"),("max","min"),d=13,c=c)
         hit_rates.append(data["hit_rate"])
+        times.append(data["time"])
 
-    axs[0].plot(hash_sizes,hit_rates)
-    axs[0].set_xlabel("hash table size")
-    axs[0].set_ylabel("Taux de hit  (%)")
+    # axs[0].plot(hash_sizes,hit_rates)
+    # axs[0].set_xlabel("hash table size")
+    # axs[0].set_ylabel("Taux de hit  (%)")
 
 
-    axs[1].plot(hash_sizes,sym_hit_rate)
-    axs[1].set_xlabel("hash table size")
-    axs[1].set_ylabel("Taux de hit symétriques  (%)")
+    axs[1].plot(cutoff,hit_rates)
+    axs[1].set_xlabel("cutoff value")
+    axs[1].set_ylabel("Taux de hit  (%)")
+
+    axs[0].plot(cutoff,times)
+    axs[0].set_xlabel("cutoff value")
+    axs[0].set_ylabel("Temps (s)")
+
 
     plt.show()
 

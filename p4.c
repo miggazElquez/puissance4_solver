@@ -28,8 +28,10 @@
 
 #define MOST_RECENT 1
 #define LOWER_DEPTH 2
+#define RECENT_AND_DEPTH 3
 
-#define REPLACEMENT_STRAT LOWER_DEPTH
+
+#define REPLACEMENT_STRAT RECENT_AND_DEPTH
 
 /* Global parameters */
 static uint8_t maxDepth = 11;
@@ -37,6 +39,7 @@ static uint8_t isInteractive = 1;
 static uint8_t csvOutput = 0;
 static uint32_t hmapSize = 65536;
 static uint32_t hmapSizeMask = 65536 - 1;
+static uint8_t replacementCutoff = 1;
 
 typedef struct {
    Board bo;
@@ -388,6 +391,17 @@ end_function:
 			} else {
 				replace = 1;
 			}
+		} else if (REPLACEMENT_STRAT == RECENT_AND_DEPTH) {
+			HashMap_Val h = hash_map[hash];
+			if (h.bo.a != 0 || h.bo.b != 0) {
+				if (h.bo.nb_pions - bo->nb_pions + replacementCutoff >= 0) { //current node is higher in the tree
+					replace = 1;
+				} else {
+					replace = 0;
+				}
+			} else {
+				replace = 1;
+			}
 		}
 
 		if (replace) {
@@ -502,8 +516,22 @@ end_function:
 				} else {
 					replace = 0;
 				}
+			} else {
+				replace = 1;
+			}
+		} else if (REPLACEMENT_STRAT == RECENT_AND_DEPTH) {
+			HashMap_Val h = hash_map[hash];
+			if (h.bo.a != 0 || h.bo.b != 0) {
+				if (h.bo.nb_pions - bo->nb_pions + replacementCutoff >= 0) { //current node is higher in the tree
+					replace = 1;
+				} else {
+					replace = 0;
+				}
+			} else {
+				replace = 1;
 			}
 		}
+
 
 		if (replace) {
 			hash_map[hash].bo = *bo;
@@ -824,7 +852,7 @@ int main(int argc, char *argv[]) {
 	extern char *optarg;
 	int c;
 
-	while ((c = getopt(argc, argv, "sfd:h:")) != -1) {
+	while ((c = getopt(argc, argv, "sfd:h:c:")) != -1) {
 		switch (c) {
 			case 'f': isInteractive = 0; break;
 			case 's': csvOutput = 1; break;
@@ -841,6 +869,11 @@ int main(int argc, char *argv[]) {
 				if (tmp_depth)
 					maxDepth = tmp_depth;
 				break;	
+			}
+			case 'c': {
+				uint8_t tmp_cutoff = strtoul(optarg,NULL,10);
+				replacementCutoff = tmp_cutoff;
+				break;
 			}
 			default:
 				break;
