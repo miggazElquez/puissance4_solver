@@ -43,9 +43,11 @@ static uint32_t hmapSizeMask = 65536 - 1;
 static uint8_t replacementCutoff = 1;
 
 typedef struct {
-   Board bo;
-   int value;
-   int cut;
+	uint64_t a;
+	uint64_t b;
+	int nb_pions;
+	char value;
+	char cut;
 } HashMap_Val;
 
 uint64_t ZOBRIST_RANDOM[84];
@@ -322,7 +324,7 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 				else if (i == 1)
 					h = hash_map2[hash];
 
-				if (h.bo.a == temp.a && h.bo.b == temp.b) {
+				if (h.a == temp.a && h.b == temp.b) {
 					if (h.cut) {
 						if (h.value >= score) {
 							val = h.value;
@@ -344,7 +346,7 @@ int min(Board *bo,int depth,int beta,Board ** PionsMask,const int colR,const int
 					else if (i == 1)
 						h2 = hash_map2[hash2];
 					
-					uint64_t a=h2.bo.a, b=h2.bo.b;
+					uint64_t a=h2.a, b=h2.b;
 					compute_sym(&a,&b);
 
 					if (a == temp.a && b == temp.b) {
@@ -412,8 +414,8 @@ end_function:
 			replace = 1;
 		} else if (REPLACEMENT_STRAT == LOWER_DEPTH) {
 			HashMap_Val h = hash_map[hash];
-			if (h.bo.a != 0 || h.bo.b != 0) {
-				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+			if (h.a != 0 || h.b != 0) {
+				if (bo->nb_pions <= h.nb_pions) { //current node is higher in the tree
 					replace = 1;
 				} else {
 					replace = 0;
@@ -423,8 +425,8 @@ end_function:
 			}
 		} else if (REPLACEMENT_STRAT == RECENT_AND_DEPTH) {
 			HashMap_Val h = hash_map[hash];
-			if (h.bo.a != 0 || h.bo.b != 0) {
-				if (h.bo.nb_pions - bo->nb_pions + replacementCutoff >= 0) { //current node is higher in the tree
+			if (h.a != 0 || h.b != 0) {
+				if (h.nb_pions - bo->nb_pions + replacementCutoff >= 0) { //current node is higher in the tree
 					replace = 1;
 				} else {
 					replace = 0;
@@ -438,17 +440,21 @@ end_function:
 
 		if (replace) {
 			//printf("	writing on 1 %ld %ld at %d\n",bo->a,bo->b,hash);
-			hash_map[hash].bo = *bo;
+			hash_map[hash].a = bo->a;
+			hash_map[hash].b = bo->b;
+			hash_map[hash].nb_pions = bo->nb_pions;
 			hash_map[hash].value = score;
 			hash_map[hash].cut = cutoff;
 		}
 
 		if (REPLACEMENT_STRAT == TWO_TIER) {
 			HashMap_Val h = hash_map2[hash]; // Second hash_map is lower_depth
-			if (h.bo.a != 0 || h.bo.b != 0) {
-				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+			if (h.a != 0 || h.b != 0) {
+				if (bo->nb_pions <= h.nb_pions) { //current node is higher in the tree
 					//printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
-					hash_map2[hash].bo = *bo;
+					hash_map2[hash].a = bo->a;
+					hash_map2[hash].b = bo->b;
+					hash_map2[hash].nb_pions = bo->nb_pions;
 					hash_map2[hash].value = score;
 					hash_map2[hash].cut = cutoff;
 				} else {
@@ -456,7 +462,9 @@ end_function:
 				}
 			} else {
 				//printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
-				hash_map2[hash].bo = *bo;
+				hash_map2[hash].a = bo->a;
+				hash_map2[hash].b = bo->b;
+				hash_map2[hash].nb_pions = bo->nb_pions;
 				hash_map2[hash].value = score;
 				hash_map2[hash].cut = cutoff;
 			}
@@ -504,7 +512,7 @@ int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const in
 				else if (i == 1)
 					h = hash_map2[hash];
 
-				if (h.bo.a == temp.a && h.bo.b == temp.b) {
+				if (h.a == temp.a && h.b == temp.b) {
 					if (h.cut) {
 						if (h.value <= score) {
 							hit = 1;
@@ -526,7 +534,7 @@ int max(Board *bo,int depth,int alpha,Board ** PionsMask,const int colR,const in
 					else if (i == 2)
 						h2 = hash_map2[hash2];
 					
-					uint64_t a=h2.bo.a, b=h2.bo.b;
+					uint64_t a=h2.a, b=h2.b;
 					compute_sym(&a,&b);
 					if (a == temp.a && b == temp.b) {
 						SYM_HIT++;
@@ -592,8 +600,8 @@ end_function:
 			replace = 1;
 		} else if (REPLACEMENT_STRAT == LOWER_DEPTH) {
 			HashMap_Val h = hash_map[hash];
-			if (h.bo.a != 0 || h.bo.b != 0) {
-				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+			if (h.a != 0 || h.b != 0) {
+				if (bo->nb_pions <= h.nb_pions) { //current node is higher in the tree
 					replace = 1;
 				} else {
 					replace = 0;
@@ -603,8 +611,8 @@ end_function:
 			}
 		} else if (REPLACEMENT_STRAT == RECENT_AND_DEPTH) {
 			HashMap_Val h = hash_map[hash];
-			if (h.bo.a != 0 || h.bo.b != 0) {
-				if (h.bo.nb_pions - bo->nb_pions + replacementCutoff >= 0) { //current node is higher in the tree
+			if (h.a != 0 || h.b != 0) {
+				if (h.nb_pions - bo->nb_pions + replacementCutoff >= 0) { //current node is higher in the tree
 					replace = 1;
 				} else {
 					replace = 0;
@@ -618,17 +626,21 @@ end_function:
 
 
 		if (replace) {
-			hash_map[hash].bo = *bo;
+			hash_map[hash].a = bo->a;
+			hash_map[hash].b = bo->b;
+			hash_map[hash].nb_pions = bo->nb_pions;
 			hash_map[hash].value = score;
 			hash_map[hash].cut = cutoff;
 		}
 
 		if (REPLACEMENT_STRAT == TWO_TIER) {
 			HashMap_Val h = hash_map2[hash]; // Second hash_map is lower_depth
-			if (h.bo.a != 0 || h.bo.b != 0) {
-				if (bo->nb_pions <= h.bo.nb_pions) { //current node is higher in the tree
+			if (h.a != 0 || h.b != 0) {
+				if (bo->nb_pions <= h.nb_pions) { //current node is higher in the tree
 //					printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
-					hash_map2[hash].bo = *bo;
+					hash_map2[hash].a = bo->a;
+					hash_map2[hash].b = bo->b;
+					hash_map2[hash].nb_pions = bo->nb_pions;
 					hash_map2[hash].value = score;
 					hash_map2[hash].cut = cutoff;
 				} else {
@@ -636,7 +648,9 @@ end_function:
 				}
 			} else {
 //				printf("	writing on 2 %ld %ld at %d\n",bo->a,bo->b,hash);
-				hash_map2[hash].bo = *bo;
+				hash_map2[hash].a = bo->a;
+				hash_map2[hash].b = bo->b;
+				hash_map2[hash].nb_pions = bo->nb_pions;
 				hash_map2[hash].value = score;
 				hash_map2[hash].cut = cutoff;
 			}
@@ -735,7 +749,7 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 					#ifdef SYM_HASH
 					uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
 					HashMap_Val h2 = hash_map[hash2];
-					uint64_t a=h2.bo.a, b=h2.bo.b;
+					uint64_t a=h2.a, b=h2.b;
 					compute_sym(&a,&b);
 					if (a == temp.a && b == temp.b) {
 						SYM_HIT++;
@@ -784,7 +798,7 @@ int cout_coup(Board *bo,int current_color, int* res,Board ** PionsMask,HashMap_V
 					uint64_t hash2 = temp.sym_zobrist_hash & hmapSizeMask;
 					HashMap_Val h2 = hash_map[hash2];
 					
-					uint64_t a=h2.bo.a, b=h2.bo.b;
+					uint64_t a=h2.a, b=h2.b;
 					compute_sym(&a,&b);
 					if (a == temp.a && b == temp.b) {
 						SYM_HIT++;
@@ -1059,7 +1073,7 @@ int main(int argc, char *argv[]) {
 			if (USE_HASHMAP == 1) {
 				int count = 0;
 				for (int i=0;i<hmapSize;i++) {
-					if (hash_map[i].bo.a != 0 || hash_map[i].bo.b != 0) {
+					if (hash_map[i].a != 0 || hash_map[i].b != 0) {
 						count++;
 					}
 				}
@@ -1152,7 +1166,7 @@ int main(int argc, char *argv[]) {
 		if (USE_HASHMAP == 1) {
 			int count = 0;
 			for (int i=0;i<hmapSize;i++) {
-				if (hash_map[i].bo.a != 0 || hash_map[i].bo.b != 0) {
+				if (hash_map[i].a != 0 || hash_map[i].b != 0) {
 					count++;
 				}
 			}
